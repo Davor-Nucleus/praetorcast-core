@@ -29,6 +29,7 @@
     </style>
 </head>
 <body>
+    <script src="/public/js/chat-common.js"></script>
     <script>
         const TWITCH_CHANNEL_NAME = "{{ twitch_channel_name }}";
         const TWITCH_OAUTH_TOKEN = "{{ twitch_oauth_token }}";
@@ -36,16 +37,6 @@
         const MAX_EMOTES = 50;
         let ws = null;
         let pingInterval = null;
-        
-
-        function parseTags(rawTags) {
-            const tags = {};
-            rawTags.substring(rawTags.startsWith("@") ? 1 : 0).split(";").forEach(part => {
-                const [key, value] = part.split("=");
-                tags[key] = value;
-            });
-            return tags;
-        }
 
         function parseEmoteUrls(emotesTag) {
             if (!emotesTag) return [];

@@ -312,6 +312,7 @@
         </div>
     </div>
 
+    <script src="/public/js/music-api.js"></script>
     <script>
         const MUSIC_PORT = {{ music_port }};
         const SOUNDBOARD_PORT = {{ soundboard_port }};
@@ -324,6 +325,7 @@
         let soundboardSounds = [];
         let selectedFolder = "";
         let intervalId = null;
+        let musicWs = null;
 
         // Fetch helpers
         async function fetchMusic(endpoint, options) {
@@ -388,14 +390,12 @@
             }
         }
 
-        async function updateCurrentMusic() {
-            const data = await fetchMusic("/api/current_music");
-            if (data) {
-                const currentMusic = data.filename || data.message || "";
+        function initMusicWS() {
+            musicWs = connectMusicWS(MUSIC_PORT, (track) => {
                 const elem = document.getElementById('currentMusic');
-                elem.textContent = currentMusic || "-";
-                elem.title = currentMusic;
-            }
+                elem.textContent = track || "-";
+                elem.title = track || "";
+            });
         }
 
         async function loadFolders() {
@@ -426,12 +426,10 @@
             selectedFolder = select.value;
             if (!selectedFolder) return;
             await fetchMusic(`/api/folder?folder=${encodeURIComponent(selectedFolder)}`);
-            updateCurrentMusic();
         }
 
         async function stopMusic() {
             await fetchMusic("/api/stop");
-            updateCurrentMusic();
         }
 
         async function loadSoundboard() {
@@ -483,14 +481,13 @@
             updateVolume("get");
             updateLimiter("get");
             updateNormalization();
-            updateCurrentMusic();
+            initMusicWS();
             await loadSoundboard();
 
             intervalId = setInterval(() => {
                 updateVolume("get");
                 updateLimiter("get");
                 updateNormalization();
-                updateCurrentMusic();
             }, 1000);
         }
 
@@ -498,6 +495,7 @@
         window.addEventListener('load', init);
         window.addEventListener('beforeunload', () => {
             if (intervalId) clearInterval(intervalId);
+            if (musicWs) musicWs.close();
             window.removeEventListener('keydown', handleKeydown);
         });
     </script>

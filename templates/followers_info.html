@@ -42,29 +42,18 @@
         </div>
     </main>
 
+    <script src="/public/js/music-api.js"></script>
     <script>
         const MUSIC_PORT = {{ music_port }};
         const TWITCH_CHANNEL_NAME = "{{ twitch_channel_name }}";
         const TWITCH_CLIENT_ID = "{{ twitch_client_id }}";
         const TWITCH_OAUTH_TOKEN = "{{ twitch_oauth_token }}";
 
-        const MUSIC_API = `http://localhost:${MUSIC_PORT}`;
         let intervalId = null;
 
-        async function fetchMusicData() {
-            try {
-                const res = await fetch(`${MUSIC_API}/api/current_music`);
-                if (res.ok) {
-                    const data = await res.json();
-                    const music = data.filename || data.message || "...";
-                    document.getElementById('currentMusic').textContent = music;
-                } else {
-                    document.getElementById('currentMusic').textContent = "Off";
-                }
-            } catch (e) {
-                document.getElementById('currentMusic').textContent = "Off";
-            }
-        }
+        connectMusicWS(MUSIC_PORT, (track) => {
+            document.getElementById('currentMusic').textContent = track || "Off";
+        });
 
         async function fetchTwitchData() {
             if (!TWITCH_CLIENT_ID || !TWITCH_OAUTH_TOKEN || !TWITCH_CHANNEL_NAME) {
@@ -120,15 +109,8 @@
             }
         }
 
-        // Initial fetch
-        fetchMusicData();
         fetchTwitchData();
-
-        // Set up interval
-        intervalId = setInterval(() => {
-            fetchMusicData();
-            fetchTwitchData();
-        }, 2000);
+        intervalId = setInterval(fetchTwitchData, 2000);
 
         // Cleanup on unload
         window.addEventListener('beforeunload', () => {
