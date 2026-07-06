@@ -3,36 +3,184 @@
 <head>
     <meta charset="utf-8">
     <title>Banner</title>
-    {% if title_font != "" %}
     <style>
         @font-face {
             font-family: 'title_font';
             src: url('{{ title_font }}') format('truetype');
         }
-    </style>
-    {% endif %}
-    <style>
-        :root {
-            --spacing-md: 1rem;
-            --spacing-xl: 2rem;
-            --radius-xl: 1rem;
-        }
 
         body {
             margin: 0;
             padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: black;
+            color: white;
+            font-family: "title_font", serif;
             overflow: hidden;
         }
 
+        /* Conteneur plein écran de la bannière */
         .banner-overlay {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
             background-color: transparent;
-            font-family: {% if title_font != "" %}"title_font", {% endif %}inherit;
+            animation: fadeIn 1s ease-in-out;
+        }
+
+        .banner-text {
+            font-size: 6em;
+            font-weight: bold;
+            width: 100%;
+            max-width: 100%;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1;
+        }
+
+        /* Image des cartes bannière */
+        .banner-image,
+        .banner-overlay img {
+            width: 500px;
+            height: auto;
+            border-radius: 10px;
+        }
+
+        /* Animation pour l'apparition */
+        @keyframes fadeIn {
+            0% {
+                opacity: 0;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideInLeft {
+            0% {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            100% {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideInRight {
+            0% {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            100% {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes zoomIn {
+            0% {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        @keyframes rotateIn {
+            0% {
+                transform: rotate(-180deg);
+                opacity: 0;
+            }
+            100% {
+                transform: rotate(0deg);
+                opacity: 1;
+            }
+        }
+
+        @keyframes bounceIn {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.2);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        @keyframes fadeInUp {
+            0% {
+                transform: translateY(50px);
+                opacity: 0;
+            }
+            100% {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes zoomSlideIn {
+            0% {
+                transform: scale(0.5) translateX(50%);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(1) translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes shake {
+            0% {
+                transform: translateX(-10px);
+            }
+            25% {
+                transform: translateX(10px);
+            }
+            50% {
+                transform: translateX(-10px);
+            }
+            75% {
+                transform: translateX(10px);
+            }
+            100% {
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes zoomInCircle {
+            0% {
+                transform: scale(0) rotate(0deg);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(1) rotate(360deg);
+                opacity: 1;
+            }
+        }
+
+        /* Styles de carte d'origine pour compatibilité avec le JS */
+        :root {
+            --spacing-md: 1rem;
+            --spacing-xl: 2rem;
+            --radius-xl: 1rem;
         }
 
         .card-wrapper {
@@ -51,39 +199,25 @@
 
         .card-container {
             position: relative;
-            width: 100%;
+            width: 70%;
             max-width: 64rem;
-            background-color: rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(192, 132, 252, 0.3);
+            background-color: transparent;
             border-radius: var(--radius-xl);
             overflow: hidden;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             min-height: 300px;
-            backdrop-filter: blur(10px);
         }
 
-        @media (min-width: 768px) {
-            .card-container {
-                flex-direction: row;
-            }
-        }
-
-        /* Image Section */
+        /* Section image */
         .image-section {
-            width: 100%;
+            width: 40%;
             position: relative;
             background-color: transparent;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: var(--spacing-md);
-        }
-
-        @media (min-width: 768px) {
-            .image-section {
-                width: 50%;
-            }
         }
 
         .banner-image {
@@ -93,7 +227,7 @@
             max-height: 400px;
         }
 
-        /* Text Section */
+        /* Section texte */
         .text-section {
             flex-grow: 1;
             display: flex;
@@ -104,10 +238,8 @@
             z-index: 10;
         }
 
-        @media (min-width: 768px) {
-            .text-section.has-image {
-                width: 50%;
-            }
+        .text-section.has-image {
+            width: 60%;
         }
 
         .text-section.full-width {
@@ -123,22 +255,6 @@
             background-color: transparent;
         }
 
-        .banner-text {
-            font-size: 1.875rem;
-            font-weight: 900;
-            letter-spacing: -0.05em;
-            text-align: center;
-            line-height: 1.375;
-            filter: drop-shadow(0 20px 13px rgb(0 0 0 / 0.03)) drop-shadow(0 8px 5px rgb(0 0 0 / 0.08));
-            width: 100%;
-        }
-
-        @media (min-width: 768px) {
-            .banner-text {
-                font-size: 3rem;
-            }
-        }
-
         .gradient-text {
             background: linear-gradient(to right, #c084fc, #ec4899, #c084fc);
             -webkit-background-clip: text;
@@ -147,7 +263,6 @@
             background-size: 200% auto;
         }
 
-        /* Animations */
         @keyframes gradient {
             0% {
                 background-position: 0% 50%;
@@ -164,108 +279,24 @@
             animation: gradient 5s ease infinite;
         }
 
-        /* Transition animations */
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
-
-        @keyframes fadeOut {
-            from {
-                opacity: 1;
-            }
-            to {
-                opacity: 0;
-            }
-        }
-
-        @keyframes slideIn {
-            from {
-                transform: translateX(200px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes slideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(-200px);
-                opacity: 0;
-            }
-        }
-
-        @keyframes zoomIn {
-            from {
-                transform: scale(0.8);
-                opacity: 0;
-            }
-            to {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
-
-        @keyframes zoomOut {
-            from {
-                transform: scale(1);
-                opacity: 1;
-            }
-            to {
-                transform: scale(0.8);
-                opacity: 0;
-            }
-        }
-
-        @keyframes flipIn {
-            from {
-                transform: translateY(100px) rotateX(90deg);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0) rotateX(0deg);
-                opacity: 1;
-            }
-        }
-
-        @keyframes flipOut {
-            from {
-                transform: translateY(0) rotateX(0deg);
-                opacity: 1;
-            }
-            to {
-                transform: translateY(-100px) rotateX(90deg);
-                opacity: 0;
-            }
-        }
-
+        /* Classes d'animation utilisées par le JS */
         .card-wrapper.fade-in {
             opacity: 0;
             animation: fadeIn 0.8s ease-out forwards;
         }
 
         .card-wrapper.fade-out {
-            animation: fadeOut 0.5s ease-out forwards;
+            animation: fadeInUp 0.5s ease-out reverse forwards;
         }
 
         .card-wrapper.slide-in {
             opacity: 0;
             transform: translateX(200px);
-            animation: slideIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation: slideInRight 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
 
         .card-wrapper.slide-out {
-            animation: slideOut 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation: slideInLeft 0.5s cubic-bezier(0.22, 1, 0.36, 1) reverse forwards;
         }
 
         .card-wrapper.zoom-in {
@@ -275,20 +306,19 @@
         }
 
         .card-wrapper.zoom-out {
-            animation: zoomOut 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation: zoomIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) reverse forwards;
         }
 
         .card-wrapper.flip-in {
             opacity: 0;
             transform: translateY(100px) rotateX(90deg);
-            animation: flipIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation: rotateIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
 
         .card-wrapper.flip-out {
-            animation: flipOut 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation: rotateIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) reverse forwards;
         }
 
-        /* Empty State */
         .empty-state {
             display: flex;
             align-items: center;
@@ -329,7 +359,7 @@
                             intervalId = setInterval(() => {
                                 currentIndex = (currentIndex + 1) % cards.length;
                                 displayCard(currentIndex);
-                            }, 5000);
+                            }, 6000);
                         }
                     } else {
                         document.getElementById('emptyState').style.display = 'flex';

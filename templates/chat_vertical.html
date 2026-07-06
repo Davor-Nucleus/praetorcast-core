@@ -4,12 +4,22 @@
     <meta charset="utf-8">
     <title>Chat Vertical</title>
     <style>
+        html {
+            overflow-y: hidden;
+        }
+
         body {
             margin: 0;
             padding: 0;
             background-color: transparent !important;
             overflow: hidden;
             font-family: "Open Sans", sans-serif;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE and Edge */
+        }
+
+        body::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
         }
 
         .container {
@@ -21,6 +31,13 @@
             padding: 10px;
             box-sizing: border-box;
             overflow-x: hidden;
+            overflow-y: hidden;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE and Edge */
+        }
+
+        .container::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
         }
 
         #chat {
@@ -31,6 +48,12 @@
             height: 100%;
             overflow-y: hidden;
             padding-bottom: 10px;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE and Edge */
+        }
+
+        #chat::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
         }
 
         .message {

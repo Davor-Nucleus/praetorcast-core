@@ -550,9 +550,22 @@
                             <input type="file" accept="image/*" class="file-input" onchange="handleFileUpload(${index}, event)" />
                             <div class="file-custom-label">${day.coverPath ? 'Image Selected (Change)' : 'Upload Cover'}</div>
                         </div>
+                        ${day.coverPath ? `
+                        <div style="margin-top: 0.5rem; display: flex; justify-content: flex-end;">
+                            <button type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" onclick="clearCover(${index})">
+                                Remove Cover
+                            </button>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
             `).join('');
+        }
+
+        function clearCover(index) {
+            schedule[index].coverPath = "";
+            renderEditor();
+            renderPreview();
         }
 
         function renderPreview() {
