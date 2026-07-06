@@ -64,3 +64,100 @@ pub fn font_path(config: &AppConfig) -> String {
         format!("/public/font/{}", config.front_font_title)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_config_deserialization() {
+        let json = r#"{
+            "FRONT_FONT_TITLE": "myfont.ttf",
+            "PORT": 8080,
+            "PORT_MUSIC": 8081,
+            "PORT_SOUNDBOARD": 8082,
+            "SOUNDBOARD_SHORTCUTS": {},
+            "TWITCH_CHANNEL_NAME": "mychannel",
+            "TWITCH_CLIENT_ID": "client123",
+            "TWITCH_OAUTH_TOKEN": "token123",
+            "PORT_WS_YOUTUBE_CHAT": 8083,
+            "PORT_WS_DISCORD_PRESENCE": 8084
+        }"#;
+        let config: AppConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.front_font_title, "myfont.ttf");
+        assert_eq!(config.port, 8080);
+        assert_eq!(config.port_music, 8081);
+        assert_eq!(config.port_soundboard, 8082);
+        assert_eq!(config.twitch_channel_name, "mychannel");
+        assert_eq!(config.twitch_client_id, "client123");
+        assert_eq!(config.twitch_oauth_token, "token123");
+        assert_eq!(config.port_ws_youtube_chat, 8083);
+        assert_eq!(config.port_discord, 8084);
+    }
+
+    #[test]
+    fn test_app_config_defaults() {
+        let json = r#"{
+            "FRONT_FONT_TITLE": "myfont.ttf",
+            "PORT": 8080,
+            "PORT_MUSIC": 8081,
+            "PORT_SOUNDBOARD": 8082,
+            "SOUNDBOARD_SHORTCUTS": {},
+            "TWITCH_CHANNEL_NAME": "mychannel",
+            "TWITCH_CLIENT_ID": "client123",
+            "TWITCH_OAUTH_TOKEN": "token123",
+            "PORT_WS_YOUTUBE_CHAT": 8083,
+            "PORT_WS_DISCORD_PRESENCE": 8084
+        }"#;
+        let config: AppConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.obs_ws_host, "localhost");
+        assert_eq!(config.obs_ws_port, 4455);
+        assert_eq!(config.obs_ws_password, "");
+        assert_eq!(config.obs_audio_source, "music");
+        assert_eq!(config.obs_limiter_filter, "Limiter");
+    }
+
+    #[test]
+    fn test_font_path_with_leading_slash() {
+        let json = r#"{
+            "FRONT_FONT_TITLE": "/custom/fonts/myfont.ttf",
+            "PORT": 8080,
+            "PORT_MUSIC": 8081,
+            "PORT_SOUNDBOARD": 8082,
+            "SOUNDBOARD_SHORTCUTS": {},
+            "TWITCH_CHANNEL_NAME": "mychannel",
+            "TWITCH_CLIENT_ID": "client123",
+            "TWITCH_OAUTH_TOKEN": "token123",
+            "PORT_WS_YOUTUBE_CHAT": 8083,
+            "PORT_WS_DISCORD_PRESENCE": 8084
+        }"#;
+        let config: AppConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(font_path(&config), "/custom/fonts/myfont.ttf");
+    }
+
+    #[test]
+    fn test_font_path_without_slash() {
+        let json = r#"{
+            "FRONT_FONT_TITLE": "myfont.ttf",
+            "PORT": 8080,
+            "PORT_MUSIC": 8081,
+            "PORT_SOUNDBOARD": 8082,
+            "SOUNDBOARD_SHORTCUTS": {},
+            "TWITCH_CHANNEL_NAME": "mychannel",
+            "TWITCH_CLIENT_ID": "client123",
+            "TWITCH_OAUTH_TOKEN": "token123",
+            "PORT_WS_YOUTUBE_CHAT": 8083,
+            "PORT_WS_DISCORD_PRESENCE": 8084
+        }"#;
+        let config: AppConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(font_path(&config), "/public/font/myfont.ttf");
+    }
+
+    #[test]
+    fn test_default_functions() {
+        assert_eq!(default_obs_host(), "localhost");
+        assert_eq!(default_obs_port(), 4455);
+        assert_eq!(default_obs_source(), "music");
+        assert_eq!(default_obs_filter(), "Limiter");
+    }
+}

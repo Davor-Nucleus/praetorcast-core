@@ -151,6 +151,7 @@ version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92589714878ca59a7626ea19734f0e07a6a875197eec751bb5d3f99e64998c63"
 dependencies = [
+ "actix-macros",
  "futures-core",
  "tokio",
 ]
@@ -1506,6 +1507,7 @@ version = "0.1.0"
 dependencies = [
  "actix-files",
  "actix-multipart",
+ "actix-rt",
  "actix-web",
  "actix-ws",
  "askama",
@@ -1515,6 +1517,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "serde_test",
  "tokio",
  "tokio-tungstenite 0.20.1",
  "uuid",
@@ -1889,6 +1892,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "serde_test"
+version = "1.0.177"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f901ee573cab6b3060453d2d5f0bae4e6d628c23c0a962ff9b5f1d7c8d4f1ed"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

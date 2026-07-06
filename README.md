@@ -22,6 +22,24 @@ Ce projet est un serveur web en Rust utilisant Actix-web et Askama pour génére
 - `templates/` : Templates dynamiques Askama (HTML)
 - `Cargo.toml` : Dépendances du projet
 
+## Tests
+
+Des tests unitaires sont intégrés directement dans les fichiers sources (`#[cfg(test)] mod tests`).
+Ils couvrent la logique métier des modèles (désérialisation, normalisation de chemins, valeurs par défaut).
+
+```sh
+# Lancer tous les tests
+cargo test
+
+# Lancer les tests d'un module spécifique (ex: banner)
+cargo test models::banner
+
+# Lancer un test précis par son nom
+cargo test test_font_path_with_leading_slash
+```
+
+> 💡 Les tests sont isolés du code de production : ils ne sont compilés qu'avec `cargo test`, pas en `cargo build`.
+
 ## Limiteur OBS
 
 La page `/music-config` peut piloter le filtre **Limiter** d'OBS appliqué à une source
