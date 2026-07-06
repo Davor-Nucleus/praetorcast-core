@@ -9,6 +9,10 @@ pub struct BannerCard {
     pub image_path: String,
     pub transition: String,
     pub order: usize,
+    /// Durée d'affichage de la carte avant rotation, en millisecondes.
+    /// Absente sur les cartes existantes → l'overlay applique sa valeur par défaut.
+    #[serde(rename = "durationMs", default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -31,8 +35,19 @@ fn normalize_path(path: String) -> String {
 }
 
 pub fn read() -> Result<Vec<BannerCard>, String> {
-    let content = fs::read_to_string("data/banner.json")
-        .map_err(|e| format!("Error reading banner.json: {}", e))?;
+    // `data/banner.json` n'est plus suivi par git (il est réécrit à chaque « Save »).
+    // En son absence (premier lancement / clone frais), on retombe sur l'exemple
+    // committé, et à défaut sur une config vide — jamais une erreur bloquante.
+    let content = match fs::read_to_string("data/banner.json") {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            match fs::read_to_string("data/banner.example.json") {
+                Ok(c) => c,
+                Err(_) => return Ok(Vec::new()),
+            }
+        }
+        Err(e) => return Err(format!("Error reading banner.json: {}", e)),
+    };
     let config: BannerConfig = serde_json::from_str(&content)
         .map_err(|e| format!("Error parsing banner.json: {}", e))?;
     Ok(config.cards.into_iter().map(|mut c| {

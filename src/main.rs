@@ -53,6 +53,7 @@ async fn main() -> std::io::Result<()> {
             .route("/api/banner-config", web::get().to(banner_controller::get))
             .route("/api/banner-config", web::post().to(banner_controller::save))
             .route("/api/banner-upload", web::post().to(banner_controller::upload))
+            .route("/api/banner_ws", web::get().to(banner_controller::banner_ws))
             // API scheduler
             .route("/api/scheduler-config", web::get().to(scheduler_controller::get))
             .route("/api/scheduler-config", web::post().to(scheduler_controller::save))

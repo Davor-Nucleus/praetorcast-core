@@ -342,35 +342,92 @@
     </div>
 
     <script>
+        const DEFAULT_DURATION_MS = 6000;
+
         let cards = [];
         let currentIndex = 0;
-        let intervalId = null;
+        let rotationTimer = null;
         let currentCardElement = null;
+        let wsDeliveredOnce = false;
 
-        async function loadConfig() {
+        function clearRotation() {
+            if (rotationTimer) {
+                clearTimeout(rotationTimer);
+                rotationTimer = null;
+            }
+        }
+
+        // Rotation par setTimeout récursif : chaque carte reste affichée selon sa
+        // propre durée (durationMs), avec repli sur DEFAULT_DURATION_MS.
+        function scheduleNext() {
+            clearRotation();
+            if (cards.length <= 1) return;
+            const duration = (cards[currentIndex] && cards[currentIndex].durationMs) || DEFAULT_DURATION_MS;
+            rotationTimer = setTimeout(() => {
+                const nextIndex = (currentIndex + 1) % cards.length;
+                displayCard(nextIndex);
+                scheduleNext();
+            }, duration);
+        }
+
+        // Applique une nouvelle config (au chargement ou poussée en direct par la WS).
+        function applyConfig(newCards) {
+            cards = Array.isArray(newCards) ? newCards : [];
+            clearRotation();
+
+            if (currentCardElement && currentCardElement.parentNode) {
+                currentCardElement.parentNode.removeChild(currentCardElement);
+            }
+            currentCardElement = null;
+            currentIndex = 0;
+
+            const emptyState = document.getElementById('emptyState');
+            if (cards.length > 0) {
+                emptyState.style.display = 'none';
+                displayCard(0);
+                scheduleNext();
+            } else {
+                emptyState.style.display = 'flex';
+            }
+        }
+
+        // Connexion WebSocket pour les mises à jour en direct (un « Save » dans le
+        // configurateur se reflète sans rafraîchir la source OBS). Repli HTTP si la
+        // WS n'aboutit pas, et reconnexion automatique en arrière-plan.
+        function connectWs() {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            let ws;
+            try {
+                ws = new WebSocket(`${proto}://${location.host}/api/banner_ws`);
+            } catch (error) {
+                loadConfigFallback();
+                return;
+            }
+
+            ws.addEventListener('message', (event) => {
+                wsDeliveredOnce = true;
+                try {
+                    applyConfig(JSON.parse(event.data));
+                } catch (error) {
+                    console.error('Banner WS parse error:', error);
+                }
+            });
+
+            ws.addEventListener('close', () => {
+                if (!wsDeliveredOnce) {
+                    loadConfigFallback();
+                }
+                setTimeout(connectWs, 2000);
+            });
+        }
+
+        async function loadConfigFallback() {
             try {
                 const response = await fetch('/api/banner-config');
-                if (response.ok) {
-                    cards = await response.json();
-                    if (cards && cards.length > 0) {
-                        document.getElementById('emptyState').style.display = 'none';
-                        displayCard(0);
-                        if (cards.length > 1) {
-                            intervalId = setInterval(() => {
-                                currentIndex = (currentIndex + 1) % cards.length;
-                                displayCard(currentIndex);
-                            }, 6000);
-                        }
-                    } else {
-                        document.getElementById('emptyState').style.display = 'flex';
-                    }
-                } else {
-                    console.error('Failed to load banner config');
-                    document.getElementById('emptyState').style.display = 'flex';
-                }
+                applyConfig(response.ok ? await response.json() : []);
             } catch (error) {
                 console.error('Error loading config:', error);
-                document.getElementById('emptyState').style.display = 'flex';
+                applyConfig([]);
             }
         }
 
@@ -385,8 +442,9 @@
             const card = cards[index];
             const overlay = document.getElementById('bannerOverlay');
             const oldCardElement = currentCardElement;
+            const oldIndex = currentIndex;
             const transitionType = card.transition || 'fade';
-            
+
             // Créer le nouvel élément
             const newCardWrapper = document.createElement('div');
             newCardWrapper.className = 'card-wrapper';
@@ -414,8 +472,8 @@
             
             // Si une carte existe déjà, démarrer les deux animations simultanément
             if (oldCardElement) {
-                const oldTransitionType = cards[currentIndex]?.transition || 'fade';
-                
+                const oldTransitionType = (cards[oldIndex] && cards[oldIndex].transition) || 'fade';
+
                 // Démarrer la sortie de l'ancienne carte
                 oldCardElement.classList.remove(getTransitionClasses(oldTransitionType, true));
                 oldCardElement.classList.add(getTransitionClasses(oldTransitionType, false));
@@ -442,13 +500,11 @@
             currentIndex = index;
         }
 
-        // Load config on page load
-        window.addEventListener('load', loadConfig);
+        // Ouvre la WS (live update) au chargement de la page.
+        window.addEventListener('load', connectWs);
 
         // Cleanup on unload
-        window.addEventListener('beforeunload', () => {
-            if (intervalId) clearInterval(intervalId);
-        });
+        window.addEventListener('beforeunload', clearRotation);
     </script>
 </body>
 </html>

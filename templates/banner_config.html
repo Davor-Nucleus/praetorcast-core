@@ -239,6 +239,124 @@
             border-color: var(--accent-glow);
             color: var(--accent-glow);
         }
+
+        /* --- Aperçu en direct d'une carte (reproduit le rendu de l'overlay) --- */
+        .preview-panel {
+            max-width: 56rem;
+            margin: 0 auto var(--spacing-lg);
+        }
+
+        .preview-stage {
+            position: relative;
+            height: 200px;
+            background-color: #000;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-light);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .preview-hint {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        .btn-preview {
+            background-color: var(--border-light);
+            color: var(--text-main);
+            font-size: 0.75rem;
+            padding: 0.35rem;
+            border: none;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+        }
+
+        .btn-preview:hover {
+            background-color: #525252;
+        }
+
+        .preview-stage .card-wrapper {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-md);
+        }
+
+        .preview-stage .card-container {
+            width: 80%;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-md);
+        }
+
+        .preview-stage .image-section {
+            flex-shrink: 0;
+        }
+
+        .preview-stage .banner-image-preview {
+            max-height: 140px;
+            max-width: 40%;
+            border-radius: var(--radius-md);
+        }
+
+        .preview-stage .banner-text {
+            margin: 0;
+            font-size: 1.75rem;
+            font-weight: bold;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .preview-stage .gradient-text {
+            background: linear-gradient(to right, #c084fc, #ec4899, #c084fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            background-size: 200% auto;
+        }
+
+        .preview-stage .animate-gradient {
+            animation: previewGradient 5s ease infinite;
+        }
+
+        @keyframes previewGradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        @keyframes previewFade {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes previewSlide {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes previewZoom {
+            from { transform: scale(0.5); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes previewFlip {
+            from { transform: translateY(60px) rotateX(90deg); opacity: 0; }
+            to { transform: translateY(0) rotateX(0deg); opacity: 1; }
+        }
+
+        .preview-stage .card-wrapper.fade-in { animation: previewFade 0.8s ease-out both; }
+        .preview-stage .card-wrapper.slide-in { animation: previewSlide 0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .preview-stage .card-wrapper.zoom-in { animation: previewZoom 0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .preview-stage .card-wrapper.flip-in { animation: previewFlip 0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
     </style>
 </head>
 <body>
@@ -253,6 +371,12 @@
                 <button onclick="saveConfig()" class="btn btn-save">Save Configuration</button>
             </div>
         </header>
+
+        <div class="preview-panel">
+            <div class="preview-stage" id="previewStage">
+                <span class="preview-hint">Cliquez « Aperçu » sur une carte pour la prévisualiser.</span>
+            </div>
+        </div>
 
         <div class="card-list" id="cardList">
             <!-- Les cartes seront ajoutées dynamiquement -->
@@ -307,8 +431,13 @@
                                 <option value="flip" ${card.transition === 'flip' ? 'selected' : ''}>Flip</option>
                             </select>
                         </div>
+                        <div class="control-group">
+                            <label for="duration-${index}" class="control-label">Durée (s) — vide = 6s par défaut</label>
+                            <input id="duration-${index}" type="number" min="1" step="0.5" value="${card.durationMs ? card.durationMs / 1000 : ''}" placeholder="6" class="input-field" onchange="updateCardDuration(${index}, this.value)" />
+                        </div>
                     </div>
                     <div class="actions-container">
+                        <button onclick="previewCard(${index})" class="btn-preview">Aperçu</button>
                         <button onclick="moveUp(${index})" class="btn-icon" ${index === 0 ? 'disabled' : ''}>↑</button>
                         <button onclick="moveDown(${index})" class="btn-icon" ${index === bannerCards.length - 1 ? 'disabled' : ''}>↓</button>
                         <button onclick="removeCard(${index})" class="btn-icon btn-delete">✕</button>
@@ -357,6 +486,7 @@
                     const data = await response.json();
                     bannerCards[index].imagePath = data.path;
                     renderCards();
+                    refreshPreviewIfActive(index);
                 } else {
                     alert('Failed to upload image');
                 }
@@ -366,12 +496,60 @@
             }
         }
 
+        let currentPreviewIndex = null;
+
         function updateCardText(index, value) {
             bannerCards[index].text = value;
+            refreshPreviewIfActive(index);
         }
 
         function updateCardTransition(index, value) {
             bannerCards[index].transition = value;
+            refreshPreviewIfActive(index);
+        }
+
+        function updateCardDuration(index, value) {
+            const seconds = parseFloat(value);
+            // Vide / invalide → on retire la durée pour retomber sur le défaut (6 s).
+            bannerCards[index].durationMs = (isNaN(seconds) || seconds <= 0) ? undefined : Math.round(seconds * 1000);
+        }
+
+        // Rejoue l'animation de la carte dans le panneau d'aperçu (reproduit l'overlay).
+        function previewCard(index) {
+            currentPreviewIndex = index;
+            const card = bannerCards[index];
+            const stage = document.getElementById('previewStage');
+            const hasImage = card.imagePath && card.imagePath.trim() !== '';
+            const transition = card.transition || 'fade';
+
+            stage.innerHTML = `
+                <div class="card-wrapper ${transition}-in">
+                    <div class="card-container">
+                        ${hasImage ? `
+                            <div class="image-section">
+                                <img src="${card.imagePath}" alt="Banner" class="banner-image-preview" />
+                            </div>
+                        ` : ''}
+                        <div class="text-section">
+                            <h2 class="banner-text">
+                                <span class="gradient-text animate-gradient">${escapeHtml(card.text || '')}</span>
+                            </h2>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function refreshPreviewIfActive(index) {
+            if (index === currentPreviewIndex && bannerCards[index]) {
+                previewCard(index);
+            }
+        }
+
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value;
+            return div.innerHTML;
         }
 
         function moveUp(index) {

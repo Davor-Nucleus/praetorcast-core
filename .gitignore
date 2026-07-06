@@ -88,6 +88,10 @@ yarn.lock
 public/soundboard/*
 !public/soundboard/song.txt
 
+# État runtime réécrit par l'app (un « Save » le modifie) : ne pas suivre pour
+# éviter les conflits à chaque git pull. Le défaut hors-ligne vient de banner.example.json.
+/data/banner.json
+
 # Fichiers de cache
 .cache/
 *.cache
