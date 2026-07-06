@@ -1,72 +1,74 @@
 /**
  * WebSocket server relaying YouTube live chat to clients in real time.
  * Reads configuration from `env.json`.
+ * Retries automatically when no live stream is found.
  */
 const { LiveChat } = require('youtube-chat');
 const WebSocket = require('ws');
 const fs = require('fs');
 
-// Chargement du fichier de config env.json
 const env = JSON.parse(fs.readFileSync('./env.json', 'utf-8'));
 
-// Récupération des paramètres
 const PORT = env.PORT_WS_YOUTUBE_CHAT;
 const CHANNEL_ID = env.YOUTUBE_CHANNEL_ID;
+const RETRY_DELAY_MS = env.YOUTUBE_CHAT_RETRY_DELAY_MS ?? 60_000;
 
-// Création du WebSocket Server
 const wss = new WebSocket.Server({ port: PORT });
 
-wss.on('connection', ws => {
-    console.log('🔌 Nouveau client WebSocket connecté');
+wss.on('connection', () => {
+    console.log('Nouveau client WebSocket connecté');
 });
 
-/**
- * Broadcasts a message to all connected WebSocket clients.
- * @param {string} message
- * @returns {void}
- */
 function broadcast(message) {
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(message); // Envoi direct du message formaté
+            client.send(message);
         }
     });
 }
 
-// Connexion au live chat
-const liveChat = new LiveChat({ channelId: CHANNEL_ID });
+function startChat() {
+    console.log('Recherche d\'un stream YouTube en cours...');
 
-liveChat.on('start', (liveId) => {
-    console.log(`✅ Lecture du chat commencée pour le live ID: ${liveId}`);
-});
+    const liveChat = new LiveChat({ channelId: CHANNEL_ID });
 
-liveChat.on('chat', (chatItem) => {
-    // Combine les parties du message
-    const messageText = chatItem.message.map(part => {
-        if (part.url) {
-            return `<img src="${part.url}" alt="${part.text}" style="height: 1.5em; vertical-align: middle;" />`;
-        }
-        return part.text;
-    }).join('');
-
-    // Formatage du message dans le format souhaité (pour logs console)
-    const formattedMessage = `${chatItem.author.name}: ${messageText}`;
-    console.log(formattedMessage);
-
-    // Diffusion à tous les clients WebSocket (Format JSON pour le frontend)
-    const payload = JSON.stringify({
-        user: chatItem.author.name,
-        text: messageText,
-        platform: 'youtube'
+    liveChat.on('start', (liveId) => {
+        console.log(`Chat connecté au live ID: ${liveId}`);
     });
 
-    broadcast(payload);
-});
+    liveChat.on('chat', (chatItem) => {
+        const messageText = chatItem.message.map(part => {
+            if (part.url) {
+                return `<img src="${part.url}" alt="${part.text}" style="height: 1.5em; vertical-align: middle;" />`;
+            }
+            return part.text;
+        }).join('');
 
-liveChat.on('error', (err) => {
-    console.error('❌ Erreur du chat:', err);
-});
+        console.log(`${chatItem.author.name}: ${messageText}`);
 
-liveChat.start();
+        broadcast(JSON.stringify({
+            user: chatItem.author.name,
+            text: messageText,
+            platform: 'youtube'
+        }));
+    });
 
-console.log(`🚀 WebSocket serveur démarré sur ws://localhost:${PORT}`);
+    liveChat.on('end', () => {
+        console.log(`Stream terminé. Nouvelle tentative dans ${RETRY_DELAY_MS / 1000}s...`);
+        setTimeout(startChat, RETRY_DELAY_MS);
+    });
+
+    liveChat.on('error', (err) => {
+        if (err.message && err.message.includes('Live Stream was not found')) {
+            console.log(`Aucun stream en cours. Nouvelle tentative dans ${RETRY_DELAY_MS / 1000}s...`);
+        } else {
+            console.error('Erreur du chat:', err.message ?? err);
+        }
+        setTimeout(startChat, RETRY_DELAY_MS);
+    });
+
+    liveChat.start();
+}
+
+console.log(`WebSocket serveur démarré sur ws://localhost:${PORT}`);
+startChat();
