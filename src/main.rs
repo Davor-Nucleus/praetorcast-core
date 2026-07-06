@@ -15,6 +15,7 @@ mod chat_horizontal;
 mod chat_vertical;
 mod chat_youtube;
 mod discord_presence;
+mod emote_corner;
 
 #[derive(Template)]
 #[template(path = "index.html")]
@@ -80,6 +81,7 @@ async fn main() -> std::io::Result<()> {
             .route("/chat-vertical", web::get().to(chat_vertical::chat_vertical))
             .route("/chat-youtube", web::get().to(chat_youtube::chat_youtube))
             .route("/discord-presence", web::get().to(discord_presence::discord_presence))
+            .route("/emote-corner", web::get().to(emote_corner::emote_corner))
             .route("/api/banner-config", web::get().to(banner_config::get_banner_config))
             .route("/api/banner-config", web::post().to(banner_config::save_banner_config))
             .route("/api/banner-upload", web::post().to(banner_config::upload_banner_image))
