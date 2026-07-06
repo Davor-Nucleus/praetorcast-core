@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Banner</title>
     <style>
         @font-face {
@@ -9,13 +10,16 @@
             src: url('{{ title_font }}') format('truetype');
         }
 
-        body {
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html, body {
             margin: 0;
             padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
             background-color: black;
             color: white;
             font-family: "title_font", serif;
@@ -25,236 +29,92 @@
         /* Conteneur plein écran de la bannière */
         .banner-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            inset: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 10px;
-            background-color: transparent;
-            animation: fadeIn 1s ease-in-out;
         }
 
-        .banner-text {
-            font-size: 6em;
-            font-weight: bold;
-            width: 100%;
-            max-width: 100%;
-            text-align: center;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            line-height: 1;
-        }
-
-        /* Image des cartes bannière */
-        .banner-image,
-        .banner-overlay img {
-            width: 500px;
-            height: auto;
-            border-radius: 10px;
-        }
-
-        /* Animation pour l'apparition */
-        @keyframes fadeIn {
-            0% {
-                opacity: 0;
-            }
-            100% {
-                opacity: 1;
-            }
-        }
-
-        @keyframes slideInLeft {
-            0% {
-                transform: translateX(-100%);
-                opacity: 0;
-            }
-            100% {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes slideInRight {
-            0% {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            100% {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes zoomIn {
-            0% {
-                transform: scale(0.5);
-                opacity: 0;
-            }
-            100% {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
-
-        @keyframes rotateIn {
-            0% {
-                transform: rotate(-180deg);
-                opacity: 0;
-            }
-            100% {
-                transform: rotate(0deg);
-                opacity: 1;
-            }
-        }
-
-        @keyframes bounceIn {
-            0% {
-                transform: scale(0);
-                opacity: 0;
-            }
-            50% {
-                transform: scale(1.2);
-                opacity: 1;
-            }
-            100% {
-                transform: scale(1);
-            }
-        }
-
-        @keyframes fadeInUp {
-            0% {
-                transform: translateY(50px);
-                opacity: 0;
-            }
-            100% {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes zoomSlideIn {
-            0% {
-                transform: scale(0.5) translateX(50%);
-                opacity: 0;
-            }
-            100% {
-                transform: scale(1) translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes shake {
-            0% {
-                transform: translateX(-10px);
-            }
-            25% {
-                transform: translateX(10px);
-            }
-            50% {
-                transform: translateX(-10px);
-            }
-            75% {
-                transform: translateX(10px);
-            }
-            100% {
-                transform: translateX(0);
-            }
-        }
-
-        @keyframes zoomInCircle {
-            0% {
-                transform: scale(0) rotate(0deg);
-                opacity: 0;
-            }
-            100% {
-                transform: scale(1) rotate(360deg);
-                opacity: 1;
-            }
-        }
-
-        /* Styles de carte d'origine pour compatibilité avec le JS */
-        :root {
-            --spacing-md: 1rem;
-            --spacing-xl: 2rem;
-            --radius-xl: 1rem;
-        }
-
+        /* Une carte occupe tout l'écran et centre son contenu. */
         .card-wrapper {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            inset: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: var(--spacing-xl);
+            padding: clamp(1rem, 4vw, 4rem);
             opacity: 0;
-            transform: translateX(0) translateY(0) scale(1) rotateX(0deg);
         }
 
         .card-container {
-            position: relative;
-            width: 70%;
-            max-width: 64rem;
-            background-color: transparent;
-            border-radius: var(--radius-xl);
-            overflow: hidden;
             display: flex;
             flex-direction: row;
-            min-height: 300px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(1rem, 3vw, 3rem);
+            width: min(92vw, 1600px);
+            max-width: 100%;
         }
 
         /* Section image */
         .image-section {
-            width: 40%;
-            position: relative;
-            background-color: transparent;
+            flex: 0 0 auto;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: var(--spacing-md);
         }
 
         .banner-image {
-            width: 100%;
-            height: 100%;
+            height: clamp(140px, 28vmin, 420px);
+            width: auto;
+            max-width: min(42vw, 520px);
             object-fit: contain;
-            max-height: 400px;
+            border-radius: 12px;
         }
 
         /* Section texte */
         .text-section {
-            flex-grow: 1;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: var(--spacing-xl);
-            position: relative;
-            z-index: 10;
+            min-width: 0;
+            padding: clamp(0.5rem, 2vw, 1.5rem);
         }
 
         .text-section.has-image {
-            width: 60%;
+            flex: 1 1 360px;
         }
 
         .text-section.full-width {
+            flex: 1 1 100%;
             width: 100%;
         }
 
-        .bg-fill {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: transparent;
+        /* La taille suit le viewport (clamp) au lieu d'un em fixe : le texte reste
+           proportionné, qu'on soit sur une petite ou une très grande fenêtre. */
+        .banner-text {
+            margin: 0;
+            font-weight: bold;
+            line-height: 1.05;
+            text-align: center;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            text-wrap: balance;
         }
 
+        .text-section.full-width .banner-text {
+            font-size: clamp(2.5rem, 9vw, 9rem);
+        }
+
+        .text-section.has-image .banner-text {
+            font-size: clamp(2rem, 6vw, 6.5rem);
+        }
+
+        /* Placeholder transparent émis par le JS quand il n'y a pas d'image. */
+        .bg-fill { display: none; }
+
+        /* Dégradé animé sur le texte */
         .gradient-text {
             background: linear-gradient(to right, #c084fc, #ec4899, #c084fc);
             -webkit-background-clip: text;
@@ -263,61 +123,37 @@
             background-size: 200% auto;
         }
 
-        @keyframes gradient {
-            0% {
-                background-position: 0% 50%;
-            }
-            50% {
-                background-position: 100% 50%;
-            }
-            100% {
-                background-position: 0% 50%;
-            }
-        }
-
         .animate-gradient {
             animation: gradient 5s ease infinite;
         }
 
-        /* Classes d'animation utilisées par le JS */
-        .card-wrapper.fade-in {
-            opacity: 0;
-            animation: fadeIn 0.8s ease-out forwards;
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
 
-        .card-wrapper.fade-out {
-            animation: fadeInUp 0.5s ease-out reverse forwards;
-        }
+        /* --- Transitions (classes posées par le JS : <type>-in / <type>-out) --- */
+        .card-wrapper.fade-in   { animation: fadeIn   0.8s ease-out both; }
+        .card-wrapper.fade-out  { animation: fadeOut  0.5s ease-in  both; }
+        .card-wrapper.slide-in  { animation: slideIn  0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .card-wrapper.slide-out { animation: slideOut 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .card-wrapper.zoom-in   { animation: zoomIn   0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .card-wrapper.zoom-out  { animation: zoomOut  0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .card-wrapper.flip-in   { animation: flipIn   0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .card-wrapper.flip-out  { animation: flipOut  0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
-        .card-wrapper.slide-in {
-            opacity: 0;
-            transform: translateX(200px);
-            animation: slideInRight 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-        }
+        @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
 
-        .card-wrapper.slide-out {
-            animation: slideInLeft 0.5s cubic-bezier(0.22, 1, 0.36, 1) reverse forwards;
-        }
+        @keyframes slideIn  { from { opacity: 0; transform: translateX(100%); }  to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideOut { from { opacity: 1; transform: translateX(0); }     to { opacity: 0; transform: translateX(-100%); } }
 
-        .card-wrapper.zoom-in {
-            opacity: 0;
-            transform: scale(0.8);
-            animation: zoomIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-        }
+        @keyframes zoomIn  { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+        @keyframes zoomOut { from { opacity: 1; transform: scale(1); }    to { opacity: 0; transform: scale(1.08); } }
 
-        .card-wrapper.zoom-out {
-            animation: zoomIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) reverse forwards;
-        }
-
-        .card-wrapper.flip-in {
-            opacity: 0;
-            transform: translateY(100px) rotateX(90deg);
-            animation: rotateIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-        }
-
-        .card-wrapper.flip-out {
-            animation: rotateIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) reverse forwards;
-        }
+        @keyframes flipIn  { from { opacity: 0; transform: perspective(1200px) rotateX(90deg); }  to { opacity: 1; transform: perspective(1200px) rotateX(0); } }
+        @keyframes flipOut { from { opacity: 1; transform: perspective(1200px) rotateX(0); }      to { opacity: 0; transform: perspective(1200px) rotateX(-90deg); } }
 
         .empty-state {
             display: flex;
@@ -327,10 +163,6 @@
             color: rgba(255, 255, 255, 0.5);
             font-family: monospace;
             font-size: 1.25rem;
-        }
-
-        .card-wrapper.hidden {
-            display: none;
         }
     </style>
 </head>
@@ -436,6 +268,12 @@
             return isIn ? `${base}-in` : `${base}-out`;
         }
 
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value;
+            return div.innerHTML;
+        }
+
         function displayCard(index) {
             if (index < 0 || index >= cards.length) return;
 
@@ -448,9 +286,9 @@
             // Créer le nouvel élément
             const newCardWrapper = document.createElement('div');
             newCardWrapper.className = 'card-wrapper';
-            
+
             const hasImage = card.imagePath && card.imagePath.trim() !== '';
-            
+
             newCardWrapper.innerHTML = `
                 <div class="card-container">
                     ${hasImage ? `
@@ -461,15 +299,15 @@
                     <div class="text-section ${hasImage ? 'has-image' : 'full-width'}">
                         ${!hasImage ? '<div class="bg-fill"></div>' : ''}
                         <h2 class="banner-text">
-                            <span class="gradient-text animate-gradient">${card.text || ''}</span>
+                            <span class="gradient-text animate-gradient">${escapeHtml(card.text || '')}</span>
                         </h2>
                     </div>
                 </div>
             `;
 
-            // Ajouter la nouvelle carte au DOM (invisible par défaut grâce aux keyframes)
+            // Ajouter la nouvelle carte au DOM (invisible par défaut)
             overlay.appendChild(newCardWrapper);
-            
+
             // Si une carte existe déjà, démarrer les deux animations simultanément
             if (oldCardElement) {
                 const oldTransitionType = (cards[oldIndex] && cards[oldIndex].transition) || 'fade';
@@ -477,20 +315,20 @@
                 // Démarrer la sortie de l'ancienne carte
                 oldCardElement.classList.remove(getTransitionClasses(oldTransitionType, true));
                 oldCardElement.classList.add(getTransitionClasses(oldTransitionType, false));
-                
+
                 // Forcer un reflow puis démarrer l'entrée de la nouvelle carte
                 requestAnimationFrame(() => {
                     newCardWrapper.className = `card-wrapper ${getTransitionClasses(transitionType, true)}`;
                 });
-                
-                // Supprimer l'ancienne carte après sa sortie (500ms pour fade-out, slide-out, etc.)
+
+                // Supprimer l'ancienne carte après sa sortie (0.5s)
                 setTimeout(() => {
                     if (oldCardElement && oldCardElement.parentNode) {
                         oldCardElement.parentNode.removeChild(oldCardElement);
                     }
                 }, 500);
             } else {
-                // Première carte, démarrer l'animation d'entrée après un petit délai
+                // Première carte, démarrer l'animation d'entrée
                 requestAnimationFrame(() => {
                     newCardWrapper.className = `card-wrapper ${getTransitionClasses(transitionType, true)}`;
                 });
@@ -508,4 +346,3 @@
     </script>
 </body>
 </html>
-
