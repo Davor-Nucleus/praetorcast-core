@@ -27,7 +27,7 @@ pub async fn clock(
     let font_path = if config.front_font_title.starts_with('/') {
         config.front_font_title.clone()
     } else {
-        format!("/public/{}", config.front_font_title)
+        format!("/public/font/{}", config.front_font_title)
     };
 
     let tmpl = ClockTemplate {

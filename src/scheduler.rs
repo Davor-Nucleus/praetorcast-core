@@ -1,3 +1,4 @@
+use crate::AppConfig;
 use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse, Responder};
 use askama::Template;
@@ -31,10 +32,21 @@ pub struct SchedulerConfig {
 
 #[derive(Template)]
 #[template(path = "scheduler.html")]
-struct SchedulerTemplate;
+struct SchedulerTemplate {
+    title_font: String,
+}
 
-pub async fn scheduler() -> impl Responder {
-    let tmpl = SchedulerTemplate;
+pub async fn scheduler(config: web::Data<AppConfig>) -> impl Responder {
+    // Construire le chemin complet vers la police de titre front
+    let font_path = if config.front_font_title.starts_with('/') {
+        config.front_font_title.clone()
+    } else {
+        format!("/public/font/{}", config.front_font_title)
+    };
+
+    let tmpl = SchedulerTemplate {
+        title_font: font_path,
+    };
     let rendered = tmpl.render().unwrap();
     HttpResponse::Ok().content_type("text/html").body(rendered)
 }
