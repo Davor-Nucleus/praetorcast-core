@@ -23,6 +23,7 @@
             color: white;
             font-family: "Impact", sans-serif;
             padding-left: 2rem;
+            gap: 0.75rem;
         }
 
 
@@ -77,6 +78,22 @@
             animation-duration: 0.5s;
         }
 
+        .music-icon {
+            font-size: 2.5em;
+            display: flex;
+            align-items: center;
+            opacity: 0;
+            min-width: 10px;
+        }
+
+        .cover-art {
+            width: 1em;
+            height: 1em;
+            border-radius: 4px;
+            object-fit: cover;
+            display: block;
+        }
+
         @media (max-width: 768px) {
             h1 {
                 font-size: medium;
@@ -86,48 +103,57 @@
     </style>
 </head>
 <body>
-        <h1 id="musicTitle" class="music-title"></h1>
+    <div id="iconWrapper" class="music-icon music-title"></div>
+    <h1 id="musicTitle" class="music-title"></h1>
 
     <script>
         const MUSIC_PORT = {{ music_port }};
-        const WS_URL = `ws://localhost:${MUSIC_PORT}/api/current_music_ws`;
 
         let currentMusic = "";
+        let currentCoverArt = null;
         let displayedMusic = "";
         let ws = null;
         let reconnectTimeout = null;
         let isAnimating = false;
         const titleElement = document.getElementById('musicTitle');
+        const iconWrapper = document.getElementById('iconWrapper');
 
-        async function updateMusic(newTitle) {
-            if (newTitle === displayedMusic && displayedMusic !== "") return;
+        async function updateMusic(newTitle, coverArt) {
+            if (newTitle === displayedMusic && coverArt === currentCoverArt && displayedMusic !== "") return;
 
-            // Start Exit Animation if there is text currently
             if (displayedMusic && titleElement) {
                 isAnimating = true;
                 titleElement.classList.remove("slide-in");
                 titleElement.classList.add("slide-out");
+                iconWrapper.classList.remove("slide-in");
+                iconWrapper.classList.add("slide-out");
 
-                // Wait for exit animation to finish
                 await new Promise(r => setTimeout(r, 500));
             }
 
-            // Update Text
             displayedMusic = newTitle;
+            currentCoverArt = coverArt;
 
-            // Start Enter Animation if there is text
             if (displayedMusic && titleElement) {
+                if (coverArt) {
+                    iconWrapper.innerHTML = `<img class="cover-art" src="${coverArt}" alt="">`;
+                } else {
+                    iconWrapper.textContent = "🎶";
+                }
+
                 titleElement.textContent = displayedMusic;
                 titleElement.classList.remove("slide-out");
-                // Trigger reflow
+                iconWrapper.classList.remove("slide-out");
                 void titleElement.offsetWidth;
                 titleElement.classList.add("slide-in");
+                iconWrapper.classList.add("slide-in");
             } else {
-                // If content is cleared, just ensure classes are reset
                 if (titleElement) {
                     titleElement.textContent = "";
                     titleElement.classList.remove("slide-out", "slide-in");
                 }
+                iconWrapper.innerHTML = "";
+                iconWrapper.classList.remove("slide-out", "slide-in");
             }
 
             isAnimating = false;
@@ -157,19 +183,13 @@
                     return;
                 }
 
-                let current = "";
-                if (data && data.current_music) {
-                    current = data.current_music;
-                }
+                const current = data?.current_music ?? "";
+                const coverArt = data?.metadata?.cover_art ?? null;
+                const newMusicTitle = current ? current.split(".")[0] : "";
 
-                const icon = current.split(".")[0] === "" ? "" : "🎶";
-                const newMusicTitle = current
-                    ? `${icon} ${current.split(".")[0]}`
-                    : "";
-
-                if (newMusicTitle !== currentMusic) {
+                if (newMusicTitle !== currentMusic || coverArt !== currentCoverArt) {
                     currentMusic = newMusicTitle;
-                    updateMusic(newMusicTitle);
+                    updateMusic(newMusicTitle, coverArt);
                 }
             });
 
