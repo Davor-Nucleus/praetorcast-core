@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Music Config</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding: 8px;
+            background: radial-gradient(circle at top, #1a1b26 0%, #0f0f13 100%);
+            box-sizing: border-box;
+            font-family: "Instrument Sans", sans-serif;
+        }
+
+        .section {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            border: 1px solid rgba(122, 162, 247, 0.1);
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            padding: 2%;
+            background: rgba(30, 30, 40, 0.6);
+        }
+
+        .section:hover {
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+            border-color: rgba(122, 162, 247, 0.2);
+        }
+
+        .label {
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+            color: #7aa2f7;
+            font-weight: 700;
+        }
+
+        .btn {
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .btn-mini {
+            background: #24283b;
+            color: #fff;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+        }
+
+        .btn:hover {
+            background: #414868;
+            color: #7aa2f7;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 4px;
+        }
+
+        .control-row {
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px;
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 8px;
+        }
+
+        .dock-select {
+            background: #16161e;
+            border: 1px solid #414868;
+            color: #c0caf5;
+            padding: 10px;
+            border-radius: 8px;
+            outline: none;
+            cursor: pointer;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .dock-select:focus {
+            border-color: #7aa2f7;
+        }
+
+        .player-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .now-playing {
+            width: 100%;
+            text-align: center;
+            text-overflow: ellipsis;
+            color: #7dcfff;
+            font-weight: 500;
+            margin-top: 12px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+
+        .btn-play {
+            background: linear-gradient(135deg, #7aa2f7 0%, #3d59a1 100%);
+            color: white;
+            padding: 10px 24px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(61, 89, 161, 0.4);
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #ff768e 0%, #f73d59 100%);
+            color: white;
+            padding: 10px 24px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(61, 89, 161, 0.4);
+        }
+
+        .sb-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .sb-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+            width: 100%;
+        }
+
+        .btn-sb {
+            background: #16161e;
+            color: #9aa5ce;
+            padding: 10px;
+            border-radius: 8px;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .btn-tiny {
+            padding: 5px 10px;
+            font-size: 0.7rem;
+            border-radius: 5px;
+        }
+
+        .back-link {
+            width: 100%;
+            display: flex;
+            justify-content: flex-end;
+            padding: 0 10px;
+        }
+
+        .back-link a {
+            color: #7aa2f7;
+            text-decoration: none;
+            font-size: 0.8rem;
+            border: 1px solid rgba(122, 162, 247, 0.3);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+
+        .back-link a:hover {
+            background: rgba(122, 162, 247, 0.1);
+        }
+
+        @media (max-width: 300px) {
+            .control-row {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="back-link">
+            <a href="/">Back Home</a>
+        </div>
+
+        <!-- Top Audio Controls -->
+        <div class="section audio-section">
+            <div class="control-row">
+                <div class="label-val">
+                    <span class="label">Volume <span id="volume">50</span>%</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-mini" onclick="updateVolume('subtract')">-</button>
+                    <button class="btn btn-mini" onclick="updateVolume('add')">+</button>
+                </div>
+            </div>
+            <div class="control-row">
+                <div class="label-val">
+                    <span class="label">Limiteur <span id="limiter">0</span> DB</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-mini" onclick="updateLimiter('subtract')">-</button>
+                    <button class="btn btn-mini" onclick="updateLimiter('add')">+</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Player Section -->
+        <div class="section player-section">
+            <div class="player-row">
+                <select class="dock-select" id="folderSelect">
+                    <option value="">Chargement...</option>
+                </select>
+            </div>
+            <div class="player-row controls">
+                <button class="btn btn-play" onclick="playMusic()">PLAY</button>
+                <button class="btn btn-stop" onclick="stopMusic()">STOP</button>
+            </div>
+            <div class="now-playing" id="currentMusic" title="">-</div>
+        </div>
+
+        <!-- Soundboard -->
+        <div class="section soundboard-section">
+            <div class="sb-header">
+                <span class="label">SOUNDBOARD</span>
+                <button class="btn btn-tiny btn-stop" onclick="stopSoundboard()">KILL</button>
+            </div>
+            <div class="sb-grid" id="soundboardGrid">
+                <!-- Les sons seront ajoutés dynamiquement -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const MUSIC_PORT = {{ music_port }};
+        const SOUNDBOARD_PORT = {{ soundboard_port }};
+        const SHORTCUTS = {{ shortcuts_json|safe }};
+        
+        const MUSIC_API = `http://localhost:${MUSIC_PORT}`;
+        const SOUNDBOARD_API = `http://localhost:${SOUNDBOARD_PORT}`;
+
+        let folders = [];
+        let soundboardSounds = [];
+        let selectedFolder = "";
+        let intervalId = null;
+
+        // Fetch helpers
+        async function fetchMusic(endpoint, options) {
+            try {
+                const res = await fetch(`${MUSIC_API}${endpoint}`, options);
+                return res.ok ? await res.json() : null;
+            } catch (e) {
+                console.error(`Music API Error (${endpoint}):`, e);
+                return null;
+            }
+        }
+
+        async function fetchSoundboard(endpoint) {
+            try {
+                const res = await fetch(`${SOUNDBOARD_API}${endpoint}`);
+                return res.ok ? await res.json() : null;
+            } catch (e) {
+                console.error(`Soundboard API Error (${endpoint}):`, e);
+                return null;
+            }
+        }
+
+        // Actions
+        async function updateVolume(action) {
+            const endpoint = action === "get" ? "/api/volume" : `/api/volume/${action}`;
+            const data = await fetchMusic(endpoint);
+            if (data && typeof data.volume === "number") {
+                document.getElementById('volume').textContent = Math.round(data.volume * 100);
+            }
+        }
+
+        async function updateLimiter(action) {
+            const endpoint = action === "get" ? "/api/limiter" : `/api/limiter/${action}`;
+            const data = await fetchMusic(endpoint);
+            if (data && typeof data.limiter === "number") {
+                document.getElementById('limiter').textContent = Math.round(data.limiter);
+            }
+        }
+
+        async function updateCurrentMusic() {
+            const data = await fetchMusic("/api/current_music");
+            if (data) {
+                const currentMusic = data.current_music || data.message || "";
+                const elem = document.getElementById('currentMusic');
+                elem.textContent = currentMusic || "-";
+                elem.title = currentMusic;
+            }
+        }
+
+        async function loadFolders() {
+            try {
+                const data = await fetchMusic("/api/folderlist");
+                if (data && Array.isArray(data.folders)) {
+                    folders = data.folders;
+                    const select = document.getElementById('folderSelect');
+                    select.innerHTML = '';
+                    folders.forEach(folder => {
+                        const option = document.createElement('option');
+                        option.value = folder;
+                        option.textContent = folder;
+                        select.appendChild(option);
+                    });
+                    if (folders.length > 0) {
+                        selectedFolder = folders[0];
+                        select.value = selectedFolder;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load folders", e);
+            }
+        }
+
+        async function playMusic() {
+            const select = document.getElementById('folderSelect');
+            selectedFolder = select.value;
+            if (!selectedFolder) return;
+            await fetchMusic(`/api/folder?folder=${encodeURIComponent(selectedFolder)}`);
+            updateCurrentMusic();
+        }
+
+        async function stopMusic() {
+            await fetchMusic("/api/stop");
+            updateCurrentMusic();
+        }
+
+        async function loadSoundboard() {
+            const data = await fetchSoundboard("/api/soundboard/sounds");
+            if (data && Array.isArray(data.sounds)) {
+                soundboardSounds = data.sounds;
+                const grid = document.getElementById('soundboardGrid');
+                grid.innerHTML = '';
+                soundboardSounds.forEach(sound => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-sb';
+                    btn.textContent = sound;
+                    btn.title = sound;
+                    btn.onclick = () => playSound(sound);
+                    grid.appendChild(btn);
+                });
+            }
+        }
+
+        async function playSound(sound) {
+            await fetchSoundboard(`/api/soundboard/play?sound=${encodeURIComponent(sound)}`);
+        }
+
+        async function stopSoundboard() {
+            await fetchSoundboard("/api/soundboard/stop");
+        }
+
+        function handleKeydown(event) {
+            const pressedKey = event.key.toLowerCase();
+            const modifier = event.ctrlKey ? "ctrl+" : event.altKey ? "alt+" : "";
+            const shortcut = modifier + pressedKey;
+
+            // Check shortcuts
+            const soundIndexStr = Object.keys(SHORTCUTS).find(
+                key => SHORTCUTS[key] === shortcut
+            );
+
+            if (soundIndexStr) {
+                const index = parseInt(soundIndexStr, 10);
+                if (!isNaN(index) && index > 0 && soundboardSounds[index - 1]) {
+                    playSound(soundboardSounds[index - 1]);
+                }
+            }
+        }
+
+        // Initialisation
+        async function init() {
+            await loadFolders();
+            updateVolume("get");
+            updateLimiter("get");
+            updateCurrentMusic();
+            await loadSoundboard();
+
+            intervalId = setInterval(() => {
+                updateVolume("get");
+                updateLimiter("get");
+                updateCurrentMusic();
+            }, 1000);
+        }
+
+        window.addEventListener('keydown', handleKeydown);
+        window.addEventListener('load', init);
+        window.addEventListener('beforeunload', () => {
+            if (intervalId) clearInterval(intervalId);
+            window.removeEventListener('keydown', handleKeydown);
+        });
+    </script>
+</body>
+</html>
+

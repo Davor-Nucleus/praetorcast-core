@@ -1,0 +1,54 @@
+{
+  "schedule": [
+    {
+      "dayIndex": 0,
+      "day": "MON",
+      "date": "02/02",
+      "title": "",
+      "coverPath": ""
+    },
+    {
+      "dayIndex": 1,
+      "day": "TUE",
+      "date": "03/02",
+      "title": "",
+      "coverPath": ""
+    },
+    {
+      "dayIndex": 2,
+      "day": "WED",
+      "date": "04/02",
+      "title": "civ 6",
+      "coverPath": "/public/scheduler/3e1092c0-1215-437a-8338-1c8fac627e00.png"
+    },
+    {
+      "dayIndex": 3,
+      "day": "THU",
+      "date": "05/02",
+      "title": "",
+      "coverPath": "/public/scheduler/638daff6-4c08-43c7-82e8-651bd2299c70.png"
+    },
+    {
+      "dayIndex": 4,
+      "day": "FRI",
+      "date": "06/02",
+      "title": "repo",
+      "coverPath": "/public/scheduler/7fbc5ff1-eb20-447c-96ea-27446917598f.jpg"
+    },
+    {
+      "dayIndex": 5,
+      "day": "SAT",
+      "date": "07/02",
+      "title": "",
+      "coverPath": ""
+    },
+    {
+      "dayIndex": 6,
+      "day": "SUN",
+      "date": "08/02",
+      "title": "",
+      "coverPath": ""
+    }
+  ],
+  "backgroundImage": "/public/scheduler/8cd9c853-edf3-4966-9b92-730654b4a14e.png"
+}

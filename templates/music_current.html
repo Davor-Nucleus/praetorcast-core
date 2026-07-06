@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Music Current</title>
+    {% if title_font != "" %}
+    <style>
+        @font-face {
+            font-family: 'title_font';
+            src: url('{{ title_font }}') format('truetype');
+        }
+    </style>
+    {% endif %}
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .page-container {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            height: 100vh;
+            background-color: black;
+            color: white;
+            font-family: "Impact", sans-serif;
+            padding-left: 2rem;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            font-family: {% if title_font != "" %}"title_font", {% endif %}"Impact", sans-serif;
+            margin: 0;
+            opacity: 0;
+            min-width: 10px;
+        }
+
+        /* Animations */
+        @keyframes slideIn {
+            0% {
+                opacity: 0;
+                transform: translateY(20px);
+                filter: blur(5px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+                filter: blur(0);
+            }
+        }
+
+        @keyframes slideOut {
+            0% {
+                opacity: 1;
+                transform: translateY(0);
+                filter: blur(0);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-20px);
+                filter: blur(5px);
+            }
+        }
+
+        .music-title {
+            animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+            animation-fill-mode: forwards;
+        }
+
+        .music-title.slide-in {
+            animation-name: slideIn;
+            animation-duration: 0.8s;
+        }
+
+        .music-title.slide-out {
+            animation-name: slideOut;
+            animation-duration: 0.5s;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: medium;
+                font-family: Arial, Helvetica, sans-serif;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <h1 id="musicTitle" class="music-title"></h1>
+    </div>
+
+    <script>
+        const MUSIC_PORT = {{ music_port }};
+        const WS_URL = `ws://localhost:${MUSIC_PORT}/api/current_music_ws`;
+
+        let currentMusic = "";
+        let displayedMusic = "";
+        let ws = null;
+        let reconnectTimeout = null;
+        let isAnimating = false;
+        const titleElement = document.getElementById('musicTitle');
+
+        async function updateMusic(newTitle) {
+            if (newTitle === displayedMusic && displayedMusic !== "") return;
+
+            // Start Exit Animation if there is text currently
+            if (displayedMusic && titleElement) {
+                isAnimating = true;
+                titleElement.classList.remove("slide-in");
+                titleElement.classList.add("slide-out");
+
+                // Wait for exit animation to finish
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            // Update Text
+            displayedMusic = newTitle;
+
+            // Start Enter Animation if there is text
+            if (displayedMusic && titleElement) {
+                titleElement.textContent = displayedMusic;
+                titleElement.classList.remove("slide-out");
+                // Trigger reflow
+                void titleElement.offsetWidth;
+                titleElement.classList.add("slide-in");
+            } else {
+                // If content is cleared, just ensure classes are reset
+                if (titleElement) {
+                    titleElement.textContent = "";
+                    titleElement.classList.remove("slide-out", "slide-in");
+                }
+            }
+
+            isAnimating = false;
+        }
+
+        function initSocket() {
+            const host = window.location.hostname || "localhost";
+            const wsUrl = `ws://${host}:${MUSIC_PORT}/api/current_music_ws`;
+
+            try {
+                ws = new WebSocket(wsUrl);
+            } catch (e) {
+                console.error("Impossible d'ouvrir le WebSocket:", e);
+                reconnectTimeout = setTimeout(initSocket, 5000);
+                return;
+            }
+
+            ws.addEventListener("open", () => {
+                console.log("Connected to music WS:", wsUrl);
+            });
+
+            ws.addEventListener("message", (evt) => {
+                let data;
+                try {
+                    data = JSON.parse(evt.data);
+                } catch (e) {
+                    return;
+                }
+
+                let current = "";
+                if (data && data.current_music) {
+                    current = data.current_music;
+                }
+
+                const icon = current.split(".")[0] === "" ? "" : "🎶";
+                const newMusicTitle = current
+                    ? `${icon} ${current.split(".")[0]}`
+                    : "";
+
+                if (newMusicTitle !== currentMusic) {
+                    currentMusic = newMusicTitle;
+                    updateMusic(newMusicTitle);
+                }
+            });
+
+            ws.addEventListener("close", () => {
+                reconnectTimeout = setTimeout(initSocket, 5000);
+            });
+
+            ws.addEventListener("error", () => {
+                try {
+                    ws?.close();
+                } catch (e) {
+                    console.error("Error closing WebSocket:", e);
+                }
+            });
+        }
+
+        // Initialize on load
+        window.addEventListener('load', () => {
+            initSocket();
+        });
+
+        // Cleanup on unload
+        window.addEventListener('beforeunload', () => {
+            if (ws) ws.close();
+            if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        });
+    </script>
+</body>
+</html>
+

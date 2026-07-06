@@ -1,0 +1,25 @@
+{
+  "cards": [
+    {
+      "id": null,
+      "text": "@tiktok",
+      "imagePath": "/public/banner/74a275a6-6dc7-4761-a329-6348f9da9dd7.png",
+      "transition": "fade",
+      "order": 0
+    },
+    {
+      "id": null,
+      "text": "@discord",
+      "imagePath": "/public/banner/378af794-d0dd-45cf-90ae-3a9a79758305.png",
+      "transition": "fade",
+      "order": 1
+    },
+    {
+      "id": null,
+      "text": "@test",
+      "imagePath": "/public/banner/395b790c-01f3-4fc7-9c0d-6fe12c71c956.png",
+      "transition": "fade",
+      "order": 2
+    }
+  ]
+}

@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Chat Horizontal</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: transparent !important;
+            overflow: hidden;
+            font-family: "Open Sans", sans-serif;
+        }
+
+        .container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        #chat {
+            display: flex;
+            flex-direction: row-reverse;
+            align-items: flex-end;
+            gap: 10px;
+            height: 100%;
+            overflow-x: hidden;
+            overflow-y: hidden;
+            padding-bottom: 10px;
+        }
+
+        .message {
+            flex: 0 0 auto;
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 8px;
+            border-radius: 4px;
+            max-width: 300px;
+            min-width: 200px;
+            color: #efeff1;
+            white-space: normal;
+            overflow-wrap: break-word;
+            height: auto;
+            max-height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .message.fade-out {
+            animation: fadeOut 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+            to {
+                opacity: 0;
+            }
+        }
+
+        .username {
+            font-weight: bold;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: sans-serif;
+            margin-left: 0.25rem;
+        }
+
+        .message-content {
+            line-height: 1.4;
+        }
+
+        .emote {
+            height: 1.5em;
+            vertical-align: middle;
+            margin: -3px 1px;
+        }
+
+        .badge {
+            height: 1em;
+            margin-right: 3px;
+            vertical-align: middle;
+        }
+
+        .meta {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="chat"></div>
+    </div>
+
+    <script src="/public/js/joypixels.min.js"></script>
+    <script>
+        const TWITCH_CHANNEL_NAME = "{{ twitch_channel_name }}";
+        const TWITCH_CLIENT_ID = "{{ twitch_client_id }}";
+        const TWITCH_OAUTH_TOKEN = "{{ twitch_oauth_token }}";
+        const PORT_WS_YOUTUBE_CHAT = {{ port_ws_youtube_chat }};
+
+        const MAX_MESSAGES = 20;
+        let messages = [];
+        let ws = null;
+        let ytWs = null;
+        let pingInterval = null;
+        let youtubeConnected = false;
+        const messageTimeouts = new Set();
+
+        // Badge Cache
+        let globalBadges = {};
+        let channelBadges = {};
+
+        async function loadBadges(token, clientId, channelName) {
+            try {
+                // Global Badges
+                const globalRes = await fetch(
+                    "https://api.twitch.tv/helix/chat/badges/global",
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token.replace("oauth:", "")}`,
+                            "Client-Id": clientId
+                        }
+                    }
+                );
+                if (globalRes.ok) {
+                    const data = await globalRes.json();
+                    data.data.forEach(badge => {
+                        badge.versions.forEach(v => {
+                            globalBadges[`${badge.set_id}/${v.id}`] = v.image_url_1x;
+                        });
+                    });
+                }
+
+                // Channel Badges
+                const userRes = await fetch(
+                    `https://api.twitch.tv/helix/users?login=${channelName}`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token.replace("oauth:", "")}`,
+                            "Client-Id": clientId
+                        }
+                    }
+                );
+                const userData = await userRes.json();
+                if (userData.data && userData.data.length > 0) {
+                    const broadcasterId = userData.data[0].id;
+                    const chanRes = await fetch(
+                        `https://api.twitch.tv/helix/chat/badges?broadcaster_id=${broadcasterId}`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${token.replace("oauth:", "")}`,
+                                "Client-Id": clientId
+                            }
+                        }
+                    );
+                    if (chanRes.ok) {
+                        const cData = await chanRes.json();
+                        cData.data.forEach(badge => {
+                            badge.versions.forEach(v => {
+                                channelBadges[`${badge.set_id}/${v.id}`] = v.image_url_1x;
+                            });
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error("Error loading badges", e);
+            }
+        }
+
+        function parseTags(rawTags) {
+            const tags = {};
+            const tagParts = rawTags.substring(rawTags.startsWith("@") ? 1 : 0).split(";");
+            tagParts.forEach(part => {
+                const [key, value] = part.split("=");
+                tags[key] = value;
+            });
+            return tags;
+        }
+
+        function parseBadges(badgesTag) {
+            if (!badgesTag) return "";
+            return badgesTag.split(",").map(badge => {
+                const [id, version] = badge.split("/");
+                const key = `${id}/${version}`;
+                const url = channelBadges[key] || globalBadges[key];
+                return url ? `<img class="badge" src="${url}" alt="${id}" />` : "";
+            }).join("");
+        }
+
+        function parseEmotes(message, emotesTag) {
+            if (!emotesTag) return message;
+
+            const replacements = [];
+            emotesTag.split("/").forEach(group => {
+                const [id, positions] = group.split(":");
+                if (!positions) return;
+                positions.split(",").forEach(pos => {
+                    const [start, end] = pos.split("-").map(Number);
+                    const url = `https://static-cdn.jtvnw.net/emoticons/v2/${id}/default/dark/1.0`;
+                    const img = `<img class="emote" src="${url}" alt="${id}" />`;
+                    replacements.push({ start, end, html: img });
+                });
+            });
+
+            replacements.sort((a, b) => a.start - b.start);
+
+            let result = "";
+            let lastIndex = 0;
+
+            replacements.forEach(r => {
+                if (r.start > lastIndex) {
+                    result += message.substring(lastIndex, r.start);
+                }
+                result += r.html;
+                lastIndex = r.end + 1;
+            });
+
+            if (lastIndex < message.length) {
+                result += message.substring(lastIndex);
+            }
+
+            return result;
+        }
+
+        function parseTwitchMessage(line) {
+            const splitIdx = line.indexOf(" :");
+            if (splitIdx === -1) return;
+
+            const tagsRaw = line.substring(0, splitIdx);
+            const rest = line.substring(splitIdx + 2);
+
+            const tags = parseTags(tagsRaw);
+
+            const msgContentIdx = rest.indexOf("PRIVMSG");
+            if (msgContentIdx === -1) return;
+
+            const afterPrivMsg = rest.substring(msgContentIdx);
+            const colonIdx = afterPrivMsg.indexOf(":");
+            if (colonIdx === -1) return;
+
+            const messageContent = afterPrivMsg.substring(colonIdx + 1);
+            const username = tags["display-name"] || "User";
+
+            addTwitchMessage(tags, username, messageContent);
+        }
+
+        function addTwitchMessage(tags, username, rawMessage) {
+            const badgesHtml = parseBadges(tags["badges"]);
+            const contentHtml = parseEmotes(rawMessage, tags["emotes"]);
+            const color = tags["color"] || "#9146FF";
+
+            const fullHtml = `
+                <div class="meta">
+                    ${badgesHtml}
+                    <span class="username" style="color: ${color}">${username}</span>
+                </div>
+                <span class="message-content">${contentHtml}</span>
+            `;
+
+            addMessage({
+                id: crypto.randomUUID(),
+                platform: "twitch",
+                user: username,
+                htmlContent: fullHtml,
+                color: color,
+                timestamp: Date.now()
+            });
+        }
+
+        function addYouTubeMessage(msgData) {
+            console.log("Adding YouTube Message:", msgData);
+            const username = msgData.user;
+            const message = msgData.text;
+            const color = "#" + Math.floor(Math.random() * 16777215).toString(16);
+
+            let processedMessage = message;
+            if (window.joypixels) {
+                try {
+                    processedMessage = window.joypixels.shortnameToImage(processedMessage);
+                    processedMessage = window.joypixels.unicodeToImage(processedMessage);
+                } catch (e) {
+                    console.error("JoyPixels Error:", e);
+                }
+            } else {
+                console.warn("JoyPixels not loaded yet");
+            }
+
+            const fullHtml = `
+                <div class="meta">
+                    <span class="username" style="color: ${color}">${username} (YT)</span>
+                </div>
+                <span class="message-content">${processedMessage}</span>
+            `;
+
+            addMessage({
+                id: crypto.randomUUID(),
+                platform: "youtube",
+                user: username,
+                htmlContent: fullHtml,
+                color: color,
+                timestamp: Date.now()
+            });
+        }
+
+        function addMessage(msg) {
+            messages = [msg, ...messages].slice(0, MAX_MESSAGES);
+            renderMessages();
+
+            const timeout = setTimeout(() => {
+                removeMessage(msg.id);
+            }, 30000);
+            messageTimeouts.add(timeout);
+        }
+
+        function removeMessage(id) {
+            const msgElement = document.getElementById(`msg-${id}`);
+            if (msgElement) {
+                msgElement.classList.add('fade-out');
+                setTimeout(() => {
+                    messages = messages.filter(m => m.id !== id);
+                    renderMessages();
+                }, 500);
+            } else {
+                messages = messages.filter(m => m.id !== id);
+                renderMessages();
+            }
+        }
+
+        function renderMessages() {
+            const chat = document.getElementById('chat');
+            chat.innerHTML = messages.map(msg => `
+                <div class="message" id="msg-${msg.id}">
+                    ${msg.htmlContent}
+                </div>
+            `).join('');
+        }
+
+        async function connectTwitch() {
+            const channel = TWITCH_CHANNEL_NAME;
+            const token = TWITCH_OAUTH_TOKEN;
+            const clientId = TWITCH_CLIENT_ID;
+            const user = channel;
+
+            if (!channel) return;
+
+            if (token && clientId) {
+                await loadBadges(token, clientId, channel);
+            }
+
+            ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
+
+            ws.onopen = () => {
+                console.log("Twitch WS Connected");
+                ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership");
+
+                if (token) {
+                    ws.send(`PASS oauth:${token.replace("oauth:", "")}`);
+                    ws.send(`NICK ${user}`);
+                } else {
+                    ws.send("PASS SCHMOOPIIE");
+                    ws.send("NICK justinfan123");
+                }
+                ws.send(`JOIN #${channel.toLowerCase()}`);
+
+                pingInterval = setInterval(() => {
+                    ws.send("PING");
+                }, 60000);
+            };
+
+            ws.onmessage = (event) => {
+                const data = event.data;
+                if (data.includes("PING")) {
+                    ws.send("PONG :tmi.twitch.tv");
+                    return;
+                }
+
+                if (data.includes("PRIVMSG")) {
+                    const lines = data.split("\r\n");
+                    lines.forEach(line => {
+                        if (line.includes("PRIVMSG")) {
+                            parseTwitchMessage(line);
+                        }
+                    });
+                }
+            };
+
+            ws.onclose = () => {
+                console.log("Twitch WS Closed, retrying...");
+                clearInterval(pingInterval);
+                setTimeout(connectTwitch, 3000);
+            };
+        }
+
+        function connectYouTubeSSE() {
+            console.log(`Connecting to YouTube WebSocket on port ${PORT_WS_YOUTUBE_CHAT}...`);
+
+            const wsUrl = `ws://localhost:${PORT_WS_YOUTUBE_CHAT}`;
+            ytWs = new WebSocket(wsUrl);
+
+            ytWs.onopen = () => {
+                console.log("🟥 YouTube WebSocket Connected");
+                youtubeConnected = true;
+            };
+
+            ytWs.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    if (data.platform === "youtube" && data.user && data.text) {
+                        addYouTubeMessage(data);
+                    }
+                } catch (e) {
+                    console.error("Error parsing YouTube WS message", e);
+                }
+            };
+
+            ytWs.onerror = (err) => {
+                console.error("YouTube WebSocket Error:", err);
+                youtubeConnected = false;
+            };
+
+            ytWs.onclose = () => {
+                console.log("YouTube WebSocket Closed, retrying...");
+                youtubeConnected = false;
+                setTimeout(connectYouTubeSSE, 5000);
+            };
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            connectTwitch();
+            connectYouTubeSSE();
+        });
+
+        // Cleanup
+        window.addEventListener('beforeunload', () => {
+            if (ws) ws.close();
+            if (ytWs) ytWs.close();
+            clearInterval(pingInterval);
+            messageTimeouts.forEach(clearTimeout);
+            messageTimeouts.clear();
+        });
+    </script>
+</body>
+</html>
+

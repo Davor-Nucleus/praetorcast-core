@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>PraetorCast - Accueil</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a0a;
+            --bg-card: #1a1a1a;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --accent-primary: #7aa2f7;
+            --accent-glow: #9aa5ce;
+            --border-light: #333333;
+            --radius-md: 0.5rem;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at top, #1a1b26 0%, #0f0f13 100%);
+            color: var(--text-main);
+            font-family: "Instrument Sans", sans-serif;
+            min-height: 100vh;
+            padding: var(--spacing-lg);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: var(--spacing-lg);
+            padding: var(--spacing-lg) 0;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--accent-glow);
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: var(--spacing-md);
+            margin-top: var(--spacing-lg);
+        }
+
+        .link-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            transition: all 0.2s ease;
+            text-decoration: none;
+            color: var(--text-main);
+            display: block;
+        }
+
+        .link-card:hover {
+            border-color: var(--accent-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(122, 162, 247, 0.2);
+        }
+
+        .link-card h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .link-card p {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .category {
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .category-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent-glow);
+            margin-bottom: var(--spacing-md);
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        @media (max-width: 768px) {
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>PraetorCast</h1>
+            <p class="subtitle">Panneau de contrôle du stream</p>
+        </header>
+
+        <div class="category">
+            <h2 class="category-title">Affichage</h2>
+            <div class="links-grid">
+                <a href="/clock" class="link-card">
+                    <h2>Horloge</h2>
+                    <p>Affiche l'heure en direct avec police personnalisable</p>
+                </a>
+                <a href="/music-current" class="link-card">
+                    <h2>Musique Actuelle</h2>
+                    <p>Affiche la musique en cours de lecture en temps réel</p>
+                </a>
+                <a href="/banner" class="link-card">
+                    <h2>Bannières</h2>
+                    <p>Affiche les bannières rotatives avec transitions</p>
+                </a>
+            </div>
+        </div>
+
+        <div class="category">
+            <h2 class="category-title">Configuration</h2>
+            <div class="links-grid">
+                <a href="/music-config" class="link-card">
+                    <h2>Configuration Musique</h2>
+                    <p>Gérer la musique, le volume, le limiteur et la soundboard</p>
+                </a>
+                <a href="/banner-config" class="link-card">
+                    <h2>Configuration Bannières</h2>
+                    <p>Gérer les bannières rotatives et leurs images</p>
+                </a>
+                <a href="/scheduler" class="link-card">
+                    <h2>Planning Hebdomadaire</h2>
+                    <p>Planifier les streams de la semaine et exporter</p>
+                </a>
+            </div>
+        </div>
+
+        <div class="category">
+            <h2 class="category-title">Chat</h2>
+            <div class="links-grid">
+                <a href="/chat-horizontal" class="link-card">
+                    <h2>Chat Horizontal</h2>
+                    <p>Chat Twitch et YouTube en affichage horizontal</p>
+                </a>
+                <a href="/chat-vertical" class="link-card">
+                    <h2>Chat Vertical</h2>
+                    <p>Chat Twitch et YouTube en affichage vertical</p>
+                </a>
+                <a href="/chat-youtube" class="link-card">
+                    <h2>Chat YouTube</h2>
+                    <p>Chat YouTube intégré via iframe</p>
+                </a>
+            </div>
+        </div>
+
+        <div class="category">
+            <h2 class="category-title">Informations</h2>
+            <div class="links-grid">
+                <a href="/followers-info" class="link-card">
+                    <h2>Informations Followers</h2>
+                    <p>Affiche le total d'abonnés Twitch et la musique actuelle</p>
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

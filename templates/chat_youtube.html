@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Chat YouTube</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a0a;
+            --text-main: #fff;
+            --bg-panel: #171717;
+            --border-light: #333;
+            --bg-input: #000;
+            --accent-primary: #9333ea;
+            --text-muted: #666;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .page-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 0;
+        }
+
+        .control-bar {
+            padding: 0.5rem;
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .chat-form {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .input-field {
+            flex: 1;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-light);
+            color: var(--text-main);
+            padding: 0.4rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            min-width: 0;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        .btn-submit {
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: filter 0.2s;
+        }
+
+        .btn-submit:hover {
+            filter: brightness(1.1);
+        }
+
+        .chat-wrapper {
+            flex: 1;
+            background-color: var(--bg-dark);
+            position: relative;
+            width: 100%;
+        }
+
+        #youtube-chat {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <div class="control-bar">
+            <form onsubmit="handleSubmit(event)" class="chat-form">
+                <input
+                    type="text"
+                    id="videoID"
+                    placeholder="ID Video/Stream"
+                    class="input-field"
+                />
+                <button type="submit" class="btn-submit">
+                    <span class="icon">➜</span>
+                </button>
+            </form>
+        </div>
+
+        <div class="chat-wrapper">
+            <div id="emptyState" class="empty-state">
+                <p>Entrez l'ID du stream</p>
+            </div>
+            <iframe
+                id="youtube-chat"
+                title="YouTube Chat"
+                frameborder="0"
+                style="display: none;"
+            ></iframe>
+        </div>
+    </div>
+
+    <script>
+        let iframeSrc = "";
+
+        function handleSubmit(event) {
+            event.preventDefault();
+            const videoID = document.getElementById('videoID').value.trim();
+            if (!videoID) return;
+
+            const domain = window.location.hostname;
+            iframeSrc = `https://www.youtube.com/live_chat?v=${videoID}&embed_domain=${domain}&dark_theme=1`;
+            
+            const iframe = document.getElementById('youtube-chat');
+            const emptyState = document.getElementById('emptyState');
+            
+            iframe.src = iframeSrc;
+            iframe.style.display = 'block';
+            emptyState.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
+

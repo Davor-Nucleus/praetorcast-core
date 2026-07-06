@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Scheduler</title>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800;1,900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root {
+            --spacing-xl: 2rem;
+            --bg-dark: #121212;
+            --text-main: #ffffff;
+            --spacing-md: 1rem;
+            --text-muted: #a0a0a0;
+            --spacing-sm: 0.5rem;
+            --radius-md: 0.375rem;
+            --accent-primary: #7aa2f7;
+            --accent-glow: #9aa5ce;
+            --bg-card: #1f1f1f;
+            --border-light: #333333;
+            --bg-panel: #1a1a1a;
+            --radius-lg: 0.5rem;
+            --border-dark: #222222;
+            --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .page-container {
+            height: 100vh;
+            width: 100vw;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: "Instrument Sans", sans-serif;
+            display: flex;
+            flex-direction: column;
+            padding: var(--spacing-md);
+            box-sizing: border-box;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-md);
+            flex-shrink: 0;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin: 0;
+        }
+
+        .page-subtitle {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin: 0;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: var(--spacing-sm);
+            align-items: center;
+        }
+
+        .content-wrapper {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+
+        @media (min-width: 1024px) {
+            .content-wrapper {
+                flex-direction: row;
+            }
+        }
+
+        .editor-panel {
+            background-color: var(--bg-panel);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-dark);
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        @media (min-width: 1024px) {
+            .editor-panel {
+                width: 350px;
+                flex: none;
+                height: 100%;
+            }
+        }
+
+        .preview-panel {
+            flex: 2;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: var(--radius-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            min-height: 0;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .export-container {
+            aspect-ratio: 16 / 9;
+            width: 100%;
+            height: auto;
+            max-height: 100%;
+            max-width: 100%;
+            container-type: size;
+            background-size: cover;
+            background-position: center;
+            border: 1px solid var(--border-dark);
+            border-radius: 12px;
+            padding: 4cqw;
+            position: relative;
+            box-shadow: var(--shadow-2xl);
+            font-family: "Instrument Sans", sans-serif;
+            margin: auto;
+        }
+
+        .overlay-gradient {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 1;
+        }
+
+        .inner-content {
+            position: relative;
+            z-index: 10;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .export-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 3cqh;
+        }
+
+        .schedule-heading {
+            font-size: 6cqw;
+            font-weight: 900;
+            font-style: italic;
+            text-transform: uppercase;
+            line-height: 1;
+            margin: 0;
+            letter-spacing: -0.02em;
+        }
+
+        .text-white {
+            color: #fff;
+        }
+
+        .text-purple {
+            color: #a855f7;
+        }
+
+        .user-label {
+            font-size: 2.5cqw;
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 500;
+            letter-spacing: 0.05em;
+        }
+
+        .schedule-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1.5cqw;
+            flex-grow: 1;
+            height: 100%;
+        }
+
+        .schedule-card {
+            position: relative;
+            background-color: rgba(20, 20, 20, 0.4);
+            background-size: cover;
+            background-position: center;
+            border-radius: 1cqw;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-gradient {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                to bottom,
+                rgba(0, 0, 0, 0.6) 0%,
+                rgba(0, 0, 0, 0) 30%,
+                rgba(0, 0, 0, 0) 60%,
+                rgba(0, 0, 0, 0.9) 100%
+            );
+            z-index: 1;
+        }
+
+        .card-content {
+            position: relative;
+            z-index: 2;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1cqw 0.5cqw;
+            text-align: center;
+        }
+
+        .card-date-box {
+            margin-top: 0.5cqh;
+        }
+
+        .day-name-display {
+            color: #a855f7;
+            font-weight: 800;
+            font-size: 1.8cqw;
+            text-transform: uppercase;
+            margin-bottom: 0.2cqh;
+            letter-spacing: 0.05em;
+        }
+
+        .day-date-display {
+            color: #fff;
+            font-weight: 800;
+            font-size: 3cqw;
+            line-height: 1;
+        }
+
+        .spacer {
+            flex-grow: 1;
+        }
+
+        .card-title-box {
+            margin-bottom: 0.5cqh;
+            width: 100%;
+        }
+
+        .card-title-display {
+            color: #fff;
+            font-weight: 700;
+            font-size: 1.8cqw;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+            white-space: normal;
+            line-height: 1.25;
+            word-break: break-word;
+            overflow-wrap: break-word;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .btn-save {
+            background-color: var(--accent-primary);
+            color: white;
+        }
+
+        .btn-save:hover {
+            background-color: var(--accent-glow);
+        }
+
+        .btn-export {
+            background-color: var(--text-main);
+            color: var(--bg-dark);
+        }
+
+        .btn-export:hover {
+            background-color: #e5e5e5;
+        }
+
+        .btn-secondary {
+            background-color: var(--bg-card);
+            color: var(--text-main);
+            border: 1px solid var(--border-light);
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--border-light);
+        }
+
+        .hidden-input {
+            display: none;
+        }
+
+        .day-editor {
+            padding-bottom: var(--spacing-md);
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .day-editor:last-child {
+            border-bottom: none;
+        }
+
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+            font-weight: 600;
+        }
+
+        .day-name {
+            color: var(--accent-glow);
+        }
+
+        .day-date {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        .input-group {
+            margin-bottom: 0.5rem;
+        }
+
+        .control-label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .input-field {
+            width: 100%;
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-light);
+            padding: 0.5rem;
+            border-radius: var(--radius-md);
+            color: white;
+            box-sizing: border-box;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input {
+            position: absolute;
+            font-size: 100px;
+            opacity: 0;
+            right: 0;
+            top: 0;
+            cursor: pointer;
+            height: 100%;
+            width: 100%;
+        }
+
+        .file-custom-label {
+            background-color: var(--bg-dark);
+            border: 1px dashed var(--border-light);
+            padding: 0.5rem;
+            border-radius: var(--radius-md);
+            color: var(--text-muted);
+            text-align: center;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .file-input:hover + .file-custom-label {
+            border-color: var(--accent-glow);
+            color: var(--accent-glow);
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <div style="width: 100%; display: flex; justify-content: flex-end; padding: 0 10px; margin-bottom: 20px;">
+            <a href="/" style="color: #7aa2f7; text-decoration: none; font-size: 0.8rem; border: 1px solid rgba(122, 162, 247, 0.3); padding: 5px 10px; border-radius: 5px;">Back Home</a>
+        </div>
+
+        <header class="page-header">
+            <div>
+                <h1 class="page-title">Streamer Weekly Scheduler</h1>
+                <p class="page-subtitle">Plan your week and export for social media.</p>
+            </div>
+
+            <div class="header-actions">
+                <label class="btn btn-secondary">
+                    Change Background
+                    <input type="file" accept="image/*" class="hidden-input" id="backgroundInput" />
+                </label>
+                <button onclick="saveSchedule()" class="btn btn-save">Save Schedule</button>
+                <button onclick="exportAsImage()" class="btn btn-export">Export Image</button>
+            </div>
+        </header>
+
+        <div class="content-wrapper">
+            <div class="editor-panel" id="editorPanel">
+                <!-- Les jours seront ajoutés dynamiquement -->
+            </div>
+
+            <div class="preview-panel">
+                <h2 class="preview-title" style="display: none;">Preview</h2>
+                <div id="schedulerRef" class="export-container">
+                    <div class="overlay-gradient"></div>
+                    <div class="inner-content">
+                        <div class="export-header">
+                            <h2 class="schedule-heading">
+                                <span class="text-white">PLANNING DE LA</span>
+                                <span class="text-purple">SEMAINE</span>
+                            </h2>
+                            <div class="user-label">LordRutra</div>
+                        </div>
+                        <div class="schedule-grid" id="scheduleGrid">
+                            <!-- Les cartes seront ajoutées dynamiquement -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        let schedule = [];
+        let backgroundImage = null;
+
+        function getWeekDays() {
+            const curr = new Date();
+            const currentDay = curr.getDay() === 0 ? 7 : curr.getDay();
+            const firstDay = curr.getDate() - currentDay + 1;
+
+            return weekDays.map((dayName, index) => {
+                const next = new Date(curr);
+                next.setDate(firstDay + index);
+                const dateStr = next.toLocaleDateString("fr-FR", {
+                    day: "numeric",
+                    month: "numeric"
+                });
+
+                return {
+                    dayIndex: index,
+                    day: dayName.substring(0, 3).toUpperCase(),
+                    date: dateStr,
+                    title: "",
+                    coverPath: ""
+                };
+            });
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/scheduler-config');
+                if (response.ok) {
+                    const config = await response.json();
+                    if (config) {
+                        if (config.backgroundImage) {
+                            backgroundImage = config.backgroundImage;
+                            updateBackground();
+                        }
+                        if (config.schedule && Array.isArray(config.schedule) && config.schedule.length > 0) {
+                            const currentWeek = getWeekDays();
+                            schedule = currentWeek.map((day) => {
+                                const savedDay = config.schedule.find(s => s.dayIndex === day.dayIndex);
+                                if (savedDay) {
+                                    return {
+                                        ...day,
+                                        title: savedDay.title || "",
+                                        coverPath: savedDay.coverPath || savedDay.cover || ""
+                                    };
+                                }
+                                return day;
+                            });
+                        } else {
+                            schedule = getWeekDays();
+                        }
+                    } else {
+                        schedule = getWeekDays();
+                    }
+                } else {
+                    schedule = getWeekDays();
+                }
+                renderEditor();
+                renderPreview();
+            } catch (error) {
+                console.error('Failed to load scheduler config:', error);
+                schedule = getWeekDays();
+                renderEditor();
+                renderPreview();
+            }
+        }
+
+        function updateBackground() {
+            const container = document.getElementById('schedulerRef');
+            if (backgroundImage) {
+                container.style.backgroundImage = `url('${backgroundImage}')`;
+            } else {
+                container.style.background = 'linear-gradient(135deg, #1f1f1f 0%, #0a0a0a 100%)';
+            }
+        }
+
+        function renderEditor() {
+            const editorPanel = document.getElementById('editorPanel');
+            editorPanel.innerHTML = schedule.map((day, index) => `
+                <div class="day-editor">
+                    <div class="day-header">
+                        <span class="day-name">${day.day}</span>
+                        <span class="day-date">${day.date}</span>
+                    </div>
+                    <div class="input-group">
+                        <label class="control-label">Stream Title</label>
+                        <input type="text" value="${day.title || ''}" placeholder="e.g. Chill Stream & Chat" class="input-field" onchange="updateTitle(${index}, this.value)" />
+                    </div>
+                    <div class="input-group">
+                        <label class="control-label">Cover Image</label>
+                        <div class="file-input-wrapper">
+                            <input type="file" accept="image/*" class="file-input" onchange="handleFileUpload(${index}, event)" />
+                            <div class="file-custom-label">${day.coverPath ? 'Image Selected (Change)' : 'Upload Cover'}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderPreview() {
+            const scheduleGrid = document.getElementById('scheduleGrid');
+            scheduleGrid.innerHTML = schedule.map(day => `
+                <div class="schedule-card" style="${day.coverPath ? `background-image: url('${day.coverPath}');` : ''}">
+                    <div class="card-gradient"></div>
+                    <div class="card-content">
+                        <div class="card-date-box">
+                            <div class="day-name-display">${day.day}</div>
+                            <div class="day-date-display">${day.date}</div>
+                        </div>
+                        <div class="spacer"></div>
+                        <div class="card-title-box">
+                            <p class="card-title-display">${day.title || 'Off'}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateTitle(index, value) {
+            schedule[index].title = value;
+            renderPreview();
+        }
+
+        async function handleFileUpload(index, event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/api/scheduler-upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    schedule[index].coverPath = data.path;
+                    renderEditor();
+                    renderPreview();
+                } else {
+                    alert('Failed to upload image');
+                }
+            } catch (error) {
+                console.error('Error uploading image:', error);
+                alert('Error uploading image');
+            }
+        }
+
+        document.getElementById('backgroundInput').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/api/scheduler-background-upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    backgroundImage = data.path;
+                    updateBackground();
+                } else {
+                    alert('Failed to upload background image');
+                }
+            } catch (error) {
+                console.error('Error uploading background image:', error);
+                alert('Error uploading background image');
+            }
+        });
+
+        async function saveSchedule() {
+            try {
+                const response = await fetch('/api/scheduler-config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        schedule: schedule,
+                        backgroundImage: backgroundImage
+                    })
+                });
+
+                if (response.ok) {
+                    alert('Schedule saved successfully!');
+                } else {
+                    const error = await response.json();
+                    alert('Failed to save schedule: ' + (error.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error saving schedule:', error);
+                alert('Failed to save schedule: ' + error);
+            }
+        }
+
+        async function exportAsImage() {
+            const schedulerRef = document.getElementById('schedulerRef');
+            if (!schedulerRef) {
+                console.error('Scheduler reference not found');
+                return;
+            }
+
+            try {
+                console.log('Starting export...');
+                const canvas = await html2canvas(schedulerRef, {
+                    backgroundColor: null,
+                    scale: 2,
+                    useCORS: true,
+                    logging: false
+                });
+
+                const dataUrl = canvas.toDataURL('image/png');
+
+                let filename = 'planning-semaine.png';
+                if (schedule.length > 0 && schedule[0].date) {
+                    const dateStr = schedule[0].date.replace('/', '-');
+                    filename = `planning-semaine-du-${dateStr}.png`;
+                }
+
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = dataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                console.log('Export successful');
+            } catch (error) {
+                console.error('Export failed:', error);
+                alert('Failed to export image: ' + error);
+            }
+        }
+
+        window.addEventListener('load', loadConfig);
+    </script>
+</body>
+</html>
+

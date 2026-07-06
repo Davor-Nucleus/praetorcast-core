@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Banner</title>
+    {% if title_font != "" %}
+    <style>
+        @font-face {
+            font-family: 'title_font';
+            src: url('{{ title_font }}') format('truetype');
+        }
+    </style>
+    {% endif %}
+    <style>
+        :root {
+            --spacing-md: 1rem;
+            --spacing-xl: 2rem;
+            --radius-xl: 1rem;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .banner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            background-color: transparent;
+            font-family: {% if title_font != "" %}"title_font", {% endif %}inherit;
+        }
+
+        .card-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-xl);
+            opacity: 0;
+            transform: translateX(0) translateY(0) scale(1) rotateX(0deg);
+        }
+
+        .card-container {
+            position: relative;
+            width: 100%;
+            max-width: 64rem;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(192, 132, 252, 0.3);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 300px;
+            backdrop-filter: blur(10px);
+        }
+
+        @media (min-width: 768px) {
+            .card-container {
+                flex-direction: row;
+            }
+        }
+
+        /* Image Section */
+        .image-section {
+            width: 100%;
+            position: relative;
+            background-color: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-md);
+        }
+
+        @media (min-width: 768px) {
+            .image-section {
+                width: 50%;
+            }
+        }
+
+        .banner-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            max-height: 400px;
+        }
+
+        /* Text Section */
+        .text-section {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-xl);
+            position: relative;
+            z-index: 10;
+        }
+
+        @media (min-width: 768px) {
+            .text-section.has-image {
+                width: 50%;
+            }
+        }
+
+        .text-section.full-width {
+            width: 100%;
+        }
+
+        .bg-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: transparent;
+        }
+
+        .banner-text {
+            font-size: 1.875rem;
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            text-align: center;
+            line-height: 1.375;
+            filter: drop-shadow(0 20px 13px rgb(0 0 0 / 0.03)) drop-shadow(0 8px 5px rgb(0 0 0 / 0.08));
+            width: 100%;
+        }
+
+        @media (min-width: 768px) {
+            .banner-text {
+                font-size: 3rem;
+            }
+        }
+
+        .gradient-text {
+            background: linear-gradient(to right, #c084fc, #ec4899, #c084fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            background-size: 200% auto;
+        }
+
+        /* Animations */
+        @keyframes gradient {
+            0% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .animate-gradient {
+            animation: gradient 5s ease infinite;
+        }
+
+        /* Transition animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+            to {
+                opacity: 0;
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(200px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(-200px);
+                opacity: 0;
+            }
+        }
+
+        @keyframes zoomIn {
+            from {
+                transform: scale(0.8);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        @keyframes zoomOut {
+            from {
+                transform: scale(1);
+                opacity: 1;
+            }
+            to {
+                transform: scale(0.8);
+                opacity: 0;
+            }
+        }
+
+        @keyframes flipIn {
+            from {
+                transform: translateY(100px) rotateX(90deg);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0) rotateX(0deg);
+                opacity: 1;
+            }
+        }
+
+        @keyframes flipOut {
+            from {
+                transform: translateY(0) rotateX(0deg);
+                opacity: 1;
+            }
+            to {
+                transform: translateY(-100px) rotateX(90deg);
+                opacity: 0;
+            }
+        }
+
+        .card-wrapper.fade-in {
+            opacity: 0;
+            animation: fadeIn 0.8s ease-out forwards;
+        }
+
+        .card-wrapper.fade-out {
+            animation: fadeOut 0.5s ease-out forwards;
+        }
+
+        .card-wrapper.slide-in {
+            opacity: 0;
+            transform: translateX(200px);
+            animation: slideIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        .card-wrapper.slide-out {
+            animation: slideOut 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        .card-wrapper.zoom-in {
+            opacity: 0;
+            transform: scale(0.8);
+            animation: zoomIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        .card-wrapper.zoom-out {
+            animation: zoomOut 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        .card-wrapper.flip-in {
+            opacity: 0;
+            transform: translateY(100px) rotateX(90deg);
+            animation: flipIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        .card-wrapper.flip-out {
+            animation: flipOut 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        /* Empty State */
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: rgba(255, 255, 255, 0.5);
+            font-family: monospace;
+            font-size: 1.25rem;
+        }
+
+        .card-wrapper.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="banner-overlay" id="bannerOverlay">
+        <div class="empty-state" id="emptyState">
+            <p>No banner cards configured or loading...</p>
+        </div>
+    </div>
+
+    <script>
+        let cards = [];
+        let currentIndex = 0;
+        let intervalId = null;
+        let currentCardElement = null;
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/banner-config');
+                if (response.ok) {
+                    cards = await response.json();
+                    if (cards && cards.length > 0) {
+                        document.getElementById('emptyState').style.display = 'none';
+                        displayCard(0);
+                        if (cards.length > 1) {
+                            intervalId = setInterval(() => {
+                                currentIndex = (currentIndex + 1) % cards.length;
+                                displayCard(currentIndex);
+                            }, 5000);
+                        }
+                    } else {
+                        document.getElementById('emptyState').style.display = 'flex';
+                    }
+                } else {
+                    console.error('Failed to load banner config');
+                    document.getElementById('emptyState').style.display = 'flex';
+                }
+            } catch (error) {
+                console.error('Error loading config:', error);
+                document.getElementById('emptyState').style.display = 'flex';
+            }
+        }
+
+        function getTransitionClasses(type, isIn) {
+            const base = type || 'fade';
+            return isIn ? `${base}-in` : `${base}-out`;
+        }
+
+        function displayCard(index) {
+            if (index < 0 || index >= cards.length) return;
+
+            const card = cards[index];
+            const overlay = document.getElementById('bannerOverlay');
+            const oldCardElement = currentCardElement;
+            const transitionType = card.transition || 'fade';
+            
+            // Créer le nouvel élément
+            const newCardWrapper = document.createElement('div');
+            newCardWrapper.className = 'card-wrapper';
+            
+            const hasImage = card.imagePath && card.imagePath.trim() !== '';
+            
+            newCardWrapper.innerHTML = `
+                <div class="card-container">
+                    ${hasImage ? `
+                        <div class="image-section">
+                            <img src="${card.imagePath}" alt="Banner" class="banner-image" />
+                        </div>
+                    ` : ''}
+                    <div class="text-section ${hasImage ? 'has-image' : 'full-width'}">
+                        ${!hasImage ? '<div class="bg-fill"></div>' : ''}
+                        <h2 class="banner-text">
+                            <span class="gradient-text animate-gradient">${card.text || ''}</span>
+                        </h2>
+                    </div>
+                </div>
+            `;
+
+            // Ajouter la nouvelle carte au DOM (invisible par défaut grâce aux keyframes)
+            overlay.appendChild(newCardWrapper);
+            
+            // Si une carte existe déjà, démarrer les deux animations simultanément
+            if (oldCardElement) {
+                const oldTransitionType = cards[currentIndex]?.transition || 'fade';
+                
+                // Démarrer la sortie de l'ancienne carte
+                oldCardElement.classList.remove(getTransitionClasses(oldTransitionType, true));
+                oldCardElement.classList.add(getTransitionClasses(oldTransitionType, false));
+                
+                // Forcer un reflow puis démarrer l'entrée de la nouvelle carte
+                requestAnimationFrame(() => {
+                    newCardWrapper.className = `card-wrapper ${getTransitionClasses(transitionType, true)}`;
+                });
+                
+                // Supprimer l'ancienne carte après sa sortie (500ms pour fade-out, slide-out, etc.)
+                setTimeout(() => {
+                    if (oldCardElement && oldCardElement.parentNode) {
+                        oldCardElement.parentNode.removeChild(oldCardElement);
+                    }
+                }, 500);
+            } else {
+                // Première carte, démarrer l'animation d'entrée après un petit délai
+                requestAnimationFrame(() => {
+                    newCardWrapper.className = `card-wrapper ${getTransitionClasses(transitionType, true)}`;
+                });
+            }
+
+            currentCardElement = newCardWrapper;
+            currentIndex = index;
+        }
+
+        // Load config on page load
+        window.addEventListener('load', loadConfig);
+
+        // Cleanup on unload
+        window.addEventListener('beforeunload', () => {
+            if (intervalId) clearInterval(intervalId);
+        });
+    </script>
+</body>
+</html>
+
