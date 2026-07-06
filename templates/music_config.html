@@ -332,7 +332,7 @@
         async function updateCurrentMusic() {
             const data = await fetchMusic("/api/current_music");
             if (data) {
-                const currentMusic = data.current_music || data.message || "";
+                const currentMusic = data.filename || data.message || "";
                 const elem = document.getElementById('currentMusic');
                 elem.textContent = currentMusic || "-";
                 elem.title = currentMusic;
