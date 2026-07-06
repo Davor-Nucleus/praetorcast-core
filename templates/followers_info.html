@@ -45,9 +45,15 @@
     <script>
         const MUSIC_PORT = {{ music_port }};
 
-        connectMusicWS(MUSIC_PORT, (track) => {
-            document.getElementById('currentMusic').textContent = track || "Off";
-        });
+        // Isolé dans un try/catch : si music-api.js manque (404), l'erreur ne doit
+        // pas avorter le reste du script et casser aussi l'affichage des followers.
+        try {
+            connectMusicWS(MUSIC_PORT, (track) => {
+                document.getElementById('currentMusic').textContent = track || "Off";
+            });
+        } catch (e) {
+            console.error("connectMusicWS indisponible:", e);
+        }
 
         function connectTwitchWS() {
             const ws = new WebSocket(`ws://${window.location.host}/api/twitch_ws`);

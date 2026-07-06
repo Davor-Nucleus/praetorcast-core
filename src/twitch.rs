@@ -100,16 +100,28 @@ async fn session(
 }
 
 async fn broadcaster_id(client: &Client, config: &TwitchConfig) -> Result<String, BoxError> {
-    let resp: Value = client
+    let resp = client
         .get("https://api.twitch.tv/helix/users")
         .query(&[("login", &config.channel_name)])
         .header("Client-Id", &config.client_id)
         .header("Authorization", config.bearer())
         .send()
-        .await?
-        .json()
         .await?;
 
+    // Distinguer un problème d'authentification d'une chaîne réellement introuvable :
+    // un 401 renvoie un corps sans tableau `data`, ce qui donnait à tort
+    // « Channel introuvable » alors que le token est juste invalide/expiré.
+    let status = resp.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(
+            "Token Twitch invalide ou expiré (HTTP 401) — régénère TWITCH_OAUTH_TOKEN".into(),
+        );
+    }
+    if !status.is_success() {
+        return Err(format!("Requête helix/users échouée (HTTP {status})").into());
+    }
+
+    let resp: Value = resp.json().await?;
     resp["data"][0]["id"]
         .as_str()
         .map(String::from)
