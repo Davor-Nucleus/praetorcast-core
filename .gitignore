@@ -21,6 +21,8 @@ Cargo.lock  # Commenter cette ligne si c'est une bibliothèque
 .project
 .classpath
 .settings/
+.claude/
+
 
 # OS files
 .DS_Store
