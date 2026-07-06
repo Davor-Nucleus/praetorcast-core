@@ -14,6 +14,7 @@ mod followers_info;
 mod chat_horizontal;
 mod chat_vertical;
 mod chat_youtube;
+mod discord_presence;
 
 #[derive(Template)]
 #[template(path = "index.html")]
@@ -39,6 +40,8 @@ pub struct AppConfig {
     pub twitch_oauth_token: String,
     #[serde(rename = "PORT_WS_YOUTUBE_CHAT")]
     pub port_ws_youtube_chat: u16,
+    #[serde(rename = "PORT_WS_DISCORD_PRESENCE")]
+    pub port_discord: u16,
 }
 
 async fn index() -> impl Responder {
@@ -76,6 +79,7 @@ async fn main() -> std::io::Result<()> {
             .route("/chat-horizontal", web::get().to(chat_horizontal::chat_horizontal))
             .route("/chat-vertical", web::get().to(chat_vertical::chat_vertical))
             .route("/chat-youtube", web::get().to(chat_youtube::chat_youtube))
+            .route("/discord-presence", web::get().to(discord_presence::discord_presence))
             .route("/api/banner-config", web::get().to(banner_config::get_banner_config))
             .route("/api/banner-config", web::post().to(banner_config::save_banner_config))
             .route("/api/banner-upload", web::post().to(banner_config::upload_banner_image))

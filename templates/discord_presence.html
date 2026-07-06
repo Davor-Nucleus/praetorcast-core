@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Discord Voice Overlay</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: transparent;
+      overflow: hidden;
+      font-family: 'gg sans', 'Noto Sans', Whitney, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+
+    #participants {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      display: flex;
+      flex-direction: row;
+      align-items: flex-end;
+      gap: 20px;
+    }
+
+    .participant {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      animation: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+
+    @keyframes pop-in {
+      from { opacity: 0; transform: scale(0.5) translateY(20px); }
+      to   { opacity: 1; transform: scale(1)   translateY(0); }
+    }
+
+    .avatar-wrapper {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      transform: scale(0.88) translateY(6px);
+      opacity: 0.7;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+      will-change: transform, opacity;
+    }
+
+    .participant.speaking .avatar-wrapper {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+      animation: talking 0.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes talking {
+      from { transform: scale(1)    translateY(0px);  }
+      to   { transform: scale(1.04) translateY(-7px); }
+    }
+
+    .avatar {
+      width: 160px;
+      height: 160px;
+      display: block;
+      object-fit: cover;
+      transition: border-color 0.2s ease;
+      border-radius: 50%;
+    }
+
+    .participant.speaking .avatar {
+      border-color: #23a55a;
+    }
+
+    .avatar-wrapper::before,
+    .avatar-wrapper::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 3px solid #23a55a;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .status-icon {
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      width: 28px;
+      height: 28px;
+      background: #ed4245;
+      border-radius: 50%;
+      border: 3px solid rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .username {
+      font-size: 15px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.75);
+      white-space: nowrap;
+      max-width: 170px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: center;
+      text-shadow: 0 1px 8px rgba(0,0,0,1);
+      letter-spacing: 0.02em;
+      transition: color 0.15s ease;
+    }
+
+    .participant.speaking .username {
+      color: #fff;
+    }
+
+    .participant.muted .avatar {
+      filter: brightness(0.35) grayscale(0.4);
+      transition: filter 0.3s ease;
+    }
+
+    .participant:not(.muted) .avatar {
+      filter: brightness(1) grayscale(0);
+      transition: filter 0.3s ease;
+    }
+  </style>
+</head>
+<body>
+  <div id="participants"></div>
+
+  <script>
+    const list = document.getElementById('participants');
+
+    const SVG_MUTE = "";
+    const SVG_DEAF = "";
+
+    function esc(s) {
+      return s.replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+      );
+    }
+
+    function render(participants) {
+      const ids = new Set(participants.map(p => p.id));
+
+      for (const el of [...list.querySelectorAll('.participant')]) {
+        if (!ids.has(el.dataset.id)) el.remove();
+      }
+
+      for (const p of participants) {
+        let el = list.querySelector(`[data-id="${p.id}"]`);
+
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'participant';
+          el.dataset.id = p.id;
+          el.innerHTML = `
+            <div class="avatar-wrapper">
+              <img class="avatar" src="${p.avatarUrl}" alt=""
+                   onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+            </div>
+            <span class="username">${esc(p.globalName)}</span>
+          `;
+          list.appendChild(el);
+        }
+
+        const wrapper = el.querySelector('.avatar-wrapper');
+        let icon = wrapper.querySelector('.status-icon');
+        const isDeaf  = p.selfDeaf || p.deaf;
+        const isMuted = p.selfMute || p.mute;
+
+        el.classList.toggle('muted', isDeaf || isMuted);
+        el.classList.toggle('speaking', !!p.speaking && !isDeaf && !isMuted);
+
+        if (isDeaf || isMuted) {
+          if (!icon) {
+            icon = document.createElement('div');
+            icon.className = 'status-icon';
+            wrapper.appendChild(icon);
+          }
+          icon.innerHTML = isDeaf ? SVG_DEAF : SVG_MUTE;
+        } else {
+          icon?.remove();
+        }
+      }
+    }
+
+    let ws;
+    function connect() {
+      ws = new WebSocket(`ws://${location.hostname}:{{ port_discord }}`);
+      ws.addEventListener('message', e => {
+        const d = JSON.parse(e.data);
+        if (d.type === 'update') render(d.participants);
+      });
+      ws.addEventListener('close', () => setTimeout(connect, 3000));
+      ws.addEventListener('error',  () => ws.close());
+    }
+    connect();
+  </script>
+</body>
+</html>
