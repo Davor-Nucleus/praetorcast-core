@@ -15,10 +15,6 @@
         body {
             margin: 0;
             padding: 0;
-            overflow: hidden;
-        }
-
-        .page-container {
             display: flex;
             justify-content: flex-start;
             align-items: center;
@@ -28,6 +24,7 @@
             font-family: "Impact", sans-serif;
             padding-left: 2rem;
         }
+
 
         h1 {
             font-size: 2.5em;
@@ -89,9 +86,7 @@
     </style>
 </head>
 <body>
-    <div class="page-container">
         <h1 id="musicTitle" class="music-title"></h1>
-    </div>
 
     <script>
         const MUSIC_PORT = {{ music_port }};

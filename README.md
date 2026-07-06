@@ -1,4 +1,4 @@
-# PraetorCast
+# PraetorCast-core
 
 Ce projet est un serveur web en Rust utilisant Actix-web et Askama pour générer des pages dynamiques.
 
