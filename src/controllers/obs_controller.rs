@@ -1,7 +1,8 @@
-use actix_web::{HttpResponse, Responder};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use obws::requests::filters::{Create, SetEnabled, SetSettings};
 use obws::requests::sources::SourceId;
 use obws::Client;
+use tokio::time::{sleep, Duration};
 use crate::models::config::{load_config, AppConfig};
 
 const THRESHOLD_MIN: f64 = -60.0;
@@ -57,7 +58,16 @@ async fn get_or_create_filter(
 /// Récupère l'état (activé + seuil) du filtre Limiter sur la source audio configurée.
 async fn read_state(config: &AppConfig) -> Result<(bool, f64), obws::error::Error> {
     let client = connect(config).await?;
-    let filter = get_or_create_filter(&client, config).await?;
+    read_state_with_client(&client, config).await
+}
+
+/// Variante de `read_state` réutilisant une connexion obs-websocket déjà ouverte,
+/// pour éviter de reconnecter à chaque lecture (utilisé par le flux WebSocket).
+async fn read_state_with_client(
+    client: &Client,
+    config: &AppConfig,
+) -> Result<(bool, f64), obws::error::Error> {
+    let filter = get_or_create_filter(client, config).await?;
     Ok((filter.enabled, extract_threshold(&filter.settings)))
 }
 
@@ -159,4 +169,60 @@ async fn toggle_limiter_inner(config: &AppConfig) -> Result<(bool, f64), obws::e
         })
         .await?;
     Ok((new_enabled, extract_threshold(&filter.settings)))
+}
+
+/// GET /api/obs/limiter_ws — pousse l'état du filtre Limiter en continu vers le
+/// navigateur, pour refléter aussi les changements faits hors de cette page
+/// (directement dans OBS ou via un autre client). On maintient **une seule**
+/// connexion obs-websocket persistante, qu'on interroge en boucle, plutôt que de
+/// reconnecter à OBS à chaque lecture comme le ferait un polling HTTP.
+pub async fn limiter_ws(
+    req: HttpRequest,
+    body: web::Payload,
+) -> actix_web::Result<HttpResponse> {
+    let (response, mut session, _) = actix_ws::handle(&req, body)?;
+    let config = load_config();
+
+    tokio::spawn(async move {
+        // État dégradé envoyé quand OBS est injoignable : déjà géré côté front
+        // par setObsLimiterUI (affiche "OBS déconnecté").
+        let degraded = serde_json::json!({ "enabled": null, "threshold": null }).to_string();
+        let mut client: Option<Client> = None;
+        let mut last = String::new();
+
+        loop {
+            // (Re)connexion paresseuse, réutilisée tant qu'elle tient.
+            if client.is_none() {
+                client = connect(&config).await.ok();
+            }
+
+            let snapshot = match &client {
+                Some(c) => match read_state_with_client(c, &config).await {
+                    Ok((enabled, threshold)) => serde_json::json!({
+                        "enabled": enabled,
+                        "threshold": threshold,
+                    })
+                    .to_string(),
+                    Err(_) => {
+                        // Connexion morte : on la jette pour reconnecter au tour suivant.
+                        client = None;
+                        degraded.clone()
+                    }
+                },
+                None => degraded.clone(),
+            };
+
+            // N'émettre que sur changement, et s'arrêter si le client est parti.
+            if snapshot != last {
+                if session.text(snapshot.clone()).await.is_err() {
+                    break;
+                }
+                last = snapshot;
+            }
+
+            sleep(Duration::from_millis(1000)).await;
+        }
+    });
+
+    Ok(response)
 }

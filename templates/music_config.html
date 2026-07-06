@@ -334,6 +334,7 @@
         let selectedFolder = "";
         let intervalId = null;
         let musicWs = null;
+        let obsLimiterWs = null;
 
         // Fetch helpers
         async function fetchMusic(endpoint, options) {
@@ -438,6 +439,10 @@
             });
         }
 
+        function initObsLimiterWS() {
+            obsLimiterWs = connectObsLimiterWS(setObsLimiterUI);
+        }
+
         async function loadFolders() {
             try {
                 const data = await fetchMusic("/api/folderlist");
@@ -522,6 +527,7 @@
             updateNormalization();
             updateObsLimiter("get");
             initMusicWS();
+            initObsLimiterWS();
             await loadSoundboard();
 
             intervalId = setInterval(() => {
@@ -535,6 +541,7 @@
         window.addEventListener('beforeunload', () => {
             if (intervalId) clearInterval(intervalId);
             if (musicWs) musicWs.close();
+            if (obsLimiterWs) obsLimiterWs.close();
             window.removeEventListener('keydown', handleKeydown);
         });
     </script>
