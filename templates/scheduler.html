@@ -484,7 +484,8 @@
                     day: dayName.substring(0, 3).toUpperCase(),
                     date: dateStr,
                     title: "",
-                    coverPath: ""
+                    coverPath: "",
+                    time: ""
                 };
             });
         }
@@ -507,7 +508,8 @@
                                     return {
                                         ...day,
                                         title: savedDay.title || "",
-                                        coverPath: savedDay.coverPath || savedDay.cover || ""
+                                        coverPath: savedDay.coverPath || savedDay.cover || "",
+                                        time: savedDay.time || ""
                                     };
                                 }
                                 return day;
@@ -553,6 +555,10 @@
                         <input type="text" value="${day.title || ''}" placeholder="e.g. Chill Stream & Chat" class="input-field" onchange="updateTitle(${index}, this.value)" />
                     </div>
                     <div class="input-group">
+                        <label class="control-label">Stream Time</label>
+                        <input type="text" value="${day.time || ''}" placeholder="e.g. 20:30" class="input-field" onchange="updateTime(${index}, this.value)" />
+                    </div>
+                    <div class="input-group">
                         <label class="control-label">Cover Image</label>
                         <div class="file-input-wrapper">
                             <input type="file" accept="image/*" class="file-input" onchange="handleFileUpload(${index}, event)" />
@@ -585,6 +591,7 @@
                         <div class="card-date-box">
                             <div class="day-name-display">${day.day}</div>
                             <div class="day-date-display">${day.date}</div>
+                            ${day.time ? `<div class="day-date-display" style="font-size: 2cqw; opacity: 0.9;">${day.time}</div>` : ''}
                         </div>
                         <div class="spacer"></div>
                         <div class="card-title-box">
@@ -597,6 +604,11 @@
 
         function updateTitle(index, value) {
             schedule[index].title = value;
+            renderPreview();
+        }
+
+        function updateTime(index, value) {
+            schedule[index].time = value;
             renderPreview();
         }
 

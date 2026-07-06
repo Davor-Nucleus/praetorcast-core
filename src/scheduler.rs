@@ -21,6 +21,8 @@ pub struct DaySchedule {
     pub title: String,
     #[serde(rename = "coverPath")]
     pub cover_path: String,
+    #[serde(rename = "time", default)]
+    pub time: String,
 }
 
 #[derive(Serialize, Deserialize)]
