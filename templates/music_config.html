@@ -200,6 +200,32 @@
             background: rgba(122, 162, 247, 0.1);
         }
 
+        .btn-norm-on {
+            background: linear-gradient(135deg, #9ece6a 0%, #5a9e3a 100%);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            box-shadow: 0 2px 8px rgba(90, 158, 58, 0.35);
+        }
+
+        .btn-norm-off {
+            background: #24283b;
+            color: #565f89;
+            padding: 6px 16px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            border: 1px solid #414868;
+        }
+
+        .btn-norm-on:hover, .btn-norm-off:hover {
+            opacity: 0.85;
+        }
+
         * {
             box-sizing: border-box;
         }
@@ -248,6 +274,14 @@
                 <div class="btn-group">
                     <button class="btn btn-mini" onclick="updateLimiter('subtract')">-</button>
                     <button class="btn btn-mini" onclick="updateLimiter('add')">+</button>
+                </div>
+            </div>
+            <div class="control-row">
+                <div class="label-val">
+                    <span class="label">NORMALISATION</span>
+                </div>
+                <div class="btn-group" style="margin-top: 4px;">
+                    <button class="btn btn-norm-on" id="normBtn" onclick="toggleNormalization()">EBU R128 : ON</button>
                 </div>
             </div>
         </div>
@@ -326,6 +360,31 @@
             const data = await fetchMusic(endpoint);
             if (data && typeof data.limiter === "number") {
                 document.getElementById('limiter').textContent = Math.round(data.limiter);
+            }
+        }
+
+        async function updateNormalization() {
+            const data = await fetchMusic("/api/normalization");
+            if (data && typeof data.normalization_enabled === "boolean") {
+                setNormalizationUI(data.normalization_enabled);
+            }
+        }
+
+        async function toggleNormalization() {
+            const data = await fetchMusic("/api/normalization/toggle");
+            if (data && typeof data.normalization_enabled === "boolean") {
+                setNormalizationUI(data.normalization_enabled);
+            }
+        }
+
+        function setNormalizationUI(enabled) {
+            const btn = document.getElementById('normBtn');
+            if (enabled) {
+                btn.textContent = 'EBU R128 : ON';
+                btn.className = 'btn btn-norm-on';
+            } else {
+                btn.textContent = 'EBU R128 : OFF';
+                btn.className = 'btn btn-norm-off';
             }
         }
 
@@ -423,12 +482,14 @@
             await loadFolders();
             updateVolume("get");
             updateLimiter("get");
+            updateNormalization();
             updateCurrentMusic();
             await loadSoundboard();
 
             intervalId = setInterval(() => {
                 updateVolume("get");
                 updateLimiter("get");
+                updateNormalization();
                 updateCurrentMusic();
             }, 1000);
         }
