@@ -4,7 +4,6 @@
     <meta charset="utf-8">
     <title>Followers Info</title>
     <style>
-
         body {
             margin: 0;
             padding: 0;
@@ -30,93 +29,40 @@
     <main>
         <div>
             <strong>Total Abonnés:</strong>
-            <span id="totalFollowers">0</span>
+            <span id="totalFollowers">-</span>
         </div>
         <div>
             <strong>Dernier Abonné:</strong>
-            <span id="lastFollower">Loading...</span>
+            <span id="lastFollower">-</span>
         </div>
         <div>
             <strong>En cours:</strong>
-            <span id="currentMusic">Loading...</span>
+            <span id="currentMusic">-</span>
         </div>
     </main>
 
     <script src="/public/js/music-api.js"></script>
     <script>
         const MUSIC_PORT = {{ music_port }};
-        const TWITCH_CHANNEL_NAME = "{{ twitch_channel_name }}";
-        const TWITCH_CLIENT_ID = "{{ twitch_client_id }}";
-        const TWITCH_OAUTH_TOKEN = "{{ twitch_oauth_token }}";
-
-        let intervalId = null;
 
         connectMusicWS(MUSIC_PORT, (track) => {
             document.getElementById('currentMusic').textContent = track || "Off";
         });
 
-        async function fetchTwitchData() {
-            if (!TWITCH_CLIENT_ID || !TWITCH_OAUTH_TOKEN || !TWITCH_CHANNEL_NAME) {
-                console.error('Missing Twitch credentials');
-                return;
-            }
+        function connectTwitchWS() {
+            const ws = new WebSocket(`ws://${window.location.host}/api/twitch_ws`);
 
-            const cleanToken = TWITCH_OAUTH_TOKEN.replace("oauth:", "");
-            const headers = {
-                "Client-Id": TWITCH_CLIENT_ID,
-                "Authorization": `Bearer ${cleanToken}`
+            ws.onmessage = (evt) => {
+                const data = JSON.parse(evt.data);
+                document.getElementById('totalFollowers').textContent = data.total_followers ?? '-';
+                document.getElementById('lastFollower').textContent = data.last_follower ?? 'Aucun';
             };
 
-            try {
-                // 1. Get Broadcaster ID
-                const userRes = await fetch(
-                    `https://api.twitch.tv/helix/users?login=${TWITCH_CHANNEL_NAME}`,
-                    { headers }
-                );
-
-                if (!userRes.ok) {
-                    console.error('Twitch User fetch failed:', await userRes.text());
-                    return;
-                }
-
-                const userData = await userRes.json();
-                if (userData.data && userData.data.length > 0) {
-                    const broadcasterId = userData.data[0].id;
-
-                    // 2. Get Followers
-                    const followersRes = await fetch(
-                        `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${broadcasterId}&first=1`,
-                        { headers }
-                    );
-
-                    if (followersRes.ok) {
-                        const followersData = await followersRes.json();
-                        document.getElementById('totalFollowers').textContent = followersData.total || 0;
-                        
-                        if (followersData.data && followersData.data.length > 0) {
-                            document.getElementById('lastFollower').textContent = followersData.data[0].user_name;
-                        } else {
-                            document.getElementById('lastFollower').textContent = "Aucun";
-                        }
-                    } else {
-                        console.error('Twitch Followers fetch failed:', await followersRes.text());
-                    }
-                } else {
-                    console.error('Twitch User not found');
-                }
-            } catch (e) {
-                console.error('Error fetching Twitch data:', e);
-            }
+            ws.onclose = () => setTimeout(connectTwitchWS, 5000);
+            ws.onerror = () => ws.close();
         }
 
-        fetchTwitchData();
-        intervalId = setInterval(fetchTwitchData, 2000);
-
-        // Cleanup on unload
-        window.addEventListener('beforeunload', () => {
-            if (intervalId) clearInterval(intervalId);
-        });
+        window.addEventListener('load', connectTwitchWS);
     </script>
 </body>
 </html>
-

@@ -22,6 +22,32 @@ pub struct AppConfig {
     pub port_ws_youtube_chat: u16,
     #[serde(rename = "PORT_WS_DISCORD_PRESENCE")]
     pub port_discord: u16,
+    #[serde(rename = "OBS_WS_HOST", default = "default_obs_host")]
+    pub obs_ws_host: String,
+    #[serde(rename = "OBS_WS_PORT", default = "default_obs_port")]
+    pub obs_ws_port: u16,
+    #[serde(rename = "OBS_WS_PASSWORD", default)]
+    pub obs_ws_password: String,
+    #[serde(rename = "OBS_AUDIO_SOURCE", default = "default_obs_source")]
+    pub obs_audio_source: String,
+    #[serde(rename = "OBS_LIMITER_FILTER", default = "default_obs_filter")]
+    pub obs_limiter_filter: String,
+}
+
+fn default_obs_host() -> String {
+    "localhost".to_string()
+}
+
+fn default_obs_port() -> u16 {
+    4455
+}
+
+fn default_obs_source() -> String {
+    "music".to_string()
+}
+
+fn default_obs_filter() -> String {
+    "Limiter".to_string()
 }
 
 pub fn load_config() -> AppConfig {

@@ -46,9 +46,6 @@ struct DiscordPresenceTemplate {
 #[template(path = "followers_info.html")]
 struct FollowersInfoTemplate {
     music_port: u16,
-    twitch_channel_name: String,
-    twitch_client_id: String,
-    twitch_oauth_token: String,
 }
 
 #[derive(Template)]
@@ -128,9 +125,6 @@ pub async fn followers_info() -> impl Responder {
     let config = load_config();
     render(FollowersInfoTemplate {
         music_port: config.port_music,
-        twitch_channel_name: config.twitch_channel_name,
-        twitch_client_id: config.twitch_client_id,
-        twitch_oauth_token: config.twitch_oauth_token,
     }.render().unwrap())
 }
 

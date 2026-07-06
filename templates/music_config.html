@@ -269,19 +269,27 @@
             </div>
             <div class="control-row">
                 <div class="label-val">
-                    <span class="label">Limiteur <span id="limiter">0</span> DB</span>
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-mini" onclick="updateLimiter('subtract')">-</button>
-                    <button class="btn btn-mini" onclick="updateLimiter('add')">+</button>
-                </div>
-            </div>
-            <div class="control-row">
-                <div class="label-val">
                     <span class="label">NORMALISATION</span>
                 </div>
                 <div class="btn-group" style="margin-top: 4px;">
                     <button class="btn btn-norm-on" id="normBtn" onclick="toggleNormalization()">EBU R128 : ON</button>
+                </div>
+            </div>
+            <div class="control-row">
+                <div class="label-val">
+                    <span class="label">Limiteur OBS <span id="obsThreshold">-</span> dB</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-mini" onclick="updateObsLimiter('subtract')">-</button>
+                    <button class="btn btn-mini" onclick="updateObsLimiter('add')">+</button>
+                </div>
+            </div>
+            <div class="control-row">
+                <div class="label-val">
+                    <span class="label">FILTRE LIMITEUR</span>
+                </div>
+                <div class="btn-group" style="margin-top: 4px;">
+                    <button class="btn btn-norm-off" id="obsLimiterBtn" onclick="toggleObsLimiter()">OBS : -</button>
                 </div>
             </div>
         </div>
@@ -357,14 +365,6 @@
             }
         }
 
-        async function updateLimiter(action) {
-            const endpoint = action === "get" ? "/api/limiter" : `/api/limiter/${action}`;
-            const data = await fetchMusic(endpoint);
-            if (data && typeof data.limiter === "number") {
-                document.getElementById('limiter').textContent = Math.round(data.limiter);
-            }
-        }
-
         async function updateNormalization() {
             const data = await fetchMusic("/api/normalization");
             if (data && typeof data.normalization_enabled === "boolean") {
@@ -386,6 +386,46 @@
                 btn.className = 'btn btn-norm-on';
             } else {
                 btn.textContent = 'EBU R128 : OFF';
+                btn.className = 'btn btn-norm-off';
+            }
+        }
+
+        // Limiteur OBS : endpoints same-origin servis par praetorcast-core
+        async function fetchLocal(endpoint) {
+            try {
+                const res = await fetch(endpoint);
+                return res.ok ? await res.json() : null;
+            } catch (e) {
+                console.error(`OBS API Error (${endpoint}):`, e);
+                return null;
+            }
+        }
+
+        async function updateObsLimiter(action) {
+            const endpoint = action === "get" ? "/api/obs/limiter" : `/api/obs/limiter/${action}`;
+            setObsLimiterUI(await fetchLocal(endpoint));
+        }
+
+        async function toggleObsLimiter() {
+            setObsLimiterUI(await fetchLocal("/api/obs/limiter/toggle"));
+        }
+
+        function setObsLimiterUI(data) {
+            const thresholdEl = document.getElementById('obsThreshold');
+            const btn = document.getElementById('obsLimiterBtn');
+            if (!data || typeof data.threshold !== "number" || typeof data.enabled !== "boolean") {
+                // OBS injoignable / filtre absent : état dégradé non bloquant
+                thresholdEl.textContent = '—';
+                btn.textContent = 'OBS déconnecté';
+                btn.className = 'btn btn-norm-off';
+                return;
+            }
+            thresholdEl.textContent = Math.round(data.threshold);
+            if (data.enabled) {
+                btn.textContent = 'OBS : ON';
+                btn.className = 'btn btn-norm-on';
+            } else {
+                btn.textContent = 'OBS : OFF';
                 btn.className = 'btn btn-norm-off';
             }
         }
@@ -479,14 +519,13 @@
         async function init() {
             await loadFolders();
             updateVolume("get");
-            updateLimiter("get");
             updateNormalization();
+            updateObsLimiter("get");
             initMusicWS();
             await loadSoundboard();
 
             intervalId = setInterval(() => {
                 updateVolume("get");
-                updateLimiter("get");
                 updateNormalization();
             }, 1000);
         }
