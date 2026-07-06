@@ -1,6 +1,6 @@
-use crate::AppConfig;
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder};
 use askama::Template;
+use crate::load_config;
 
 #[derive(Template)]
 #[template(path = "followers_info.html")]
@@ -11,7 +11,8 @@ struct FollowersInfoTemplate {
     twitch_oauth_token: String,
 }
 
-pub async fn followers_info(config: web::Data<AppConfig>) -> impl Responder {
+pub async fn followers_info() -> impl Responder {
+    let config = load_config();
     let tmpl = FollowersInfoTemplate {
         music_port: config.port_music,
         twitch_channel_name: config.twitch_channel_name.clone(),

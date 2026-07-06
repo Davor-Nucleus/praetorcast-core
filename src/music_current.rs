@@ -1,6 +1,6 @@
-use crate::AppConfig;
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder};
 use askama::Template;
+use crate::load_config;
 
 #[derive(Template)]
 #[template(path = "music_current.html")]
@@ -9,7 +9,8 @@ struct MusicCurrentTemplate {
     title_font: String,
 }
 
-pub async fn music_current(config: web::Data<AppConfig>) -> impl Responder {
+pub async fn music_current() -> impl Responder {
+    let config = load_config();
     // Construire le chemin complet vers la police
     let font_path = if config.front_font_title.starts_with('/') {
         config.front_font_title.clone()

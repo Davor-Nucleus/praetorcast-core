@@ -1,6 +1,6 @@
-use crate::AppConfig;
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder};
 use askama::Template;
+use crate::load_config;
 
 #[derive(Template)]
 #[template(path = "banner.html")]
@@ -8,7 +8,8 @@ struct BannerTemplate {
     title_font: String,
 }
 
-pub async fn banner(config: web::Data<AppConfig>) -> impl Responder {
+pub async fn banner() -> impl Responder {
+    let config = load_config();
     // Construire le chemin complet vers la police
     let font_path = if config.front_font_title.starts_with('/') {
         config.front_font_title.clone()

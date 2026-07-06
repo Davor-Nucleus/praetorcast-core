@@ -1,6 +1,6 @@
-use crate::AppConfig;
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder};
 use askama::Template;
+use crate::load_config;
 
 #[derive(Template)]
 #[template(path = "music_config.html")]
@@ -10,7 +10,8 @@ struct MusicConfigTemplate {
     shortcuts_json: String,
 }
 
-pub async fn music_config(config: web::Data<AppConfig>) -> impl Responder {
+pub async fn music_config() -> impl Responder {
+    let config = load_config();
     // Convertir les raccourcis en JSON pour le JavaScript
     let shortcuts_json = serde_json::to_string(&config.soundboard_shortcuts)
         .unwrap_or_else(|_| "{}".to_string());

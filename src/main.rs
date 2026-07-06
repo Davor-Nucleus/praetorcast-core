@@ -1,9 +1,8 @@
 
 use actix_files::Files;
-use actix_web::{web, App, HttpServer, HttpResponse, Responder};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use askama::Template;
 use serde::Deserialize;
-use std::sync::Arc;
 
 mod clock;
 mod music_config;
@@ -48,19 +47,23 @@ async fn index() -> impl Responder {
     HttpResponse::Ok().content_type("text/html").body(rendered)
 }
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    // Charger la configuration depuis env.json
+// Fonction de chargement de configuration, appelée depuis main et les handlers
+pub fn load_config() -> AppConfig {
     let env_content = std::fs::read_to_string("env.json")
         .expect("Impossible de lire env.json");
     let config: AppConfig = serde_json::from_str(&env_content)
         .expect("Impossible de parser env.json");
-    let config = Arc::new(config);
+    config
+}
 
-    let config_clone = config.clone();
-    let server = HttpServer::new(move || {
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    // Charger la config une fois ici pour récupérer le port d'écoute
+    let config = load_config();
+    let port = config.port;
+
+    let server = HttpServer::new(|| {
         App::new()
-            .app_data(web::Data::from(config_clone.clone()))
             .service(Files::new("/public", "./public"))
             .route("/", web::get().to(index))
             .route("/clock", web::get().to(clock::clock))
@@ -79,11 +82,17 @@ async fn main() -> std::io::Result<()> {
             .route("/api/scheduler-config", web::get().to(scheduler::get_scheduler_config))
             .route("/api/scheduler-config", web::post().to(scheduler::save_scheduler_config))
             .route("/api/scheduler-upload", web::post().to(scheduler::upload_scheduler_image))
-            .route("/api/scheduler-background-upload", web::post().to(scheduler::upload_background_image))
+            .route(
+                "/api/scheduler-background-upload",
+                web::post().to(scheduler::upload_background_image),
+            )
     })
-    .bind(("127.0.0.1", config.port))?;
+    .bind(("127.0.0.1", port))?;
 
-    println!("Serveur en cours d'exécution sur http://127.0.0.1:{}", config.port);
-    
+    println!(
+        "Serveur en cours d'exécution sur http://127.0.0.1:{}",
+        port
+    );
+
     server.run().await
 }

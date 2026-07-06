@@ -1,6 +1,6 @@
-use crate::AppConfig;
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder};
 use askama::Template;
+use crate::load_config;
 
 #[derive(Template)]
 #[template(path = "chat_vertical.html")]
@@ -11,7 +11,8 @@ struct ChatVerticalTemplate {
     port_ws_youtube_chat: u16,
 }
 
-pub async fn chat_vertical(config: web::Data<AppConfig>) -> impl Responder {
+pub async fn chat_vertical() -> impl Responder {
+    let config = load_config();
     let tmpl = ChatVerticalTemplate {
         twitch_channel_name: config.twitch_channel_name.clone(),
         twitch_client_id: config.twitch_client_id.clone(),

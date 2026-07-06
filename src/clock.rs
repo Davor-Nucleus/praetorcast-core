@@ -1,7 +1,7 @@
-use crate::AppConfig;
 use actix_web::{web, HttpResponse, Responder};
 use askama::Template;
 use serde::Deserialize;
+use crate::load_config;
 
 #[derive(Template)]
 #[template(path = "clock.html")]
@@ -19,10 +19,9 @@ pub struct ClockQuery {
     second: Option<bool>,
 }
 
-pub async fn clock(
-    config: web::Data<AppConfig>,
-    query: web::Query<ClockQuery>,
-) -> impl Responder {
+pub async fn clock(query: web::Query<ClockQuery>) -> impl Responder {
+    // Recharger la configuration à chaque requête
+    let config = load_config();
     // Construire le chemin complet vers la police
     let font_path = if config.front_font_title.starts_with('/') {
         config.front_font_title.clone()

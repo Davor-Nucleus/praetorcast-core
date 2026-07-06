@@ -1,4 +1,3 @@
-use crate::AppConfig;
 use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse, Responder};
 use askama::Template;
@@ -8,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use uuid::Uuid;
+use crate::load_config;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct DaySchedule {
@@ -36,7 +36,8 @@ struct SchedulerTemplate {
     title_font: String,
 }
 
-pub async fn scheduler(config: web::Data<AppConfig>) -> impl Responder {
+pub async fn scheduler() -> impl Responder {
+    let config = load_config();
     // Construire le chemin complet vers la police de titre front
     let font_path = if config.front_font_title.starts_with('/') {
         config.front_font_title.clone()
