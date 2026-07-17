@@ -41,9 +41,13 @@ pub fn read() -> Result<Vec<BannerCard>, String> {
     let content = match fs::read_to_string("data/banner.json") {
         Ok(c) => c,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            match fs::read_to_string("data/banner.example.json") {
-                Ok(c) => c,
-                Err(_) => return Ok(Vec::new()),
+            // Tente d'abord l'exemple, sinon crée un fichier vide par défaut
+            if let Ok(c) = fs::read_to_string("data/banner.example.json") {
+                c
+            } else {
+                let default: Vec<BannerCard> = Vec::new();
+                write(default)?;
+                return Ok(Vec::new());
             }
         }
         Err(e) => return Err(format!("Error reading banner.json: {}", e)),

@@ -93,6 +93,10 @@ public/soundboard/*
 # État runtime réécrit par l'app (un « Save » le modifie) : ne pas suivre pour
 # éviter les conflits à chaque git pull. Le défaut hors-ligne vient de banner.example.json.
 /data/banner.json
+/data/scheduler.json
+
+/public/banner/*
+
 
 # Fichiers de cache
 .cache/

@@ -36,8 +36,18 @@ fn normalize_path(path: &str) -> String {
 }
 
 pub fn read() -> Result<SchedulerConfig, String> {
-    let content = fs::read_to_string("data/scheduler.json")
-        .map_err(|e| format!("Error reading scheduler.json: {}", e))?;
+    let content = match fs::read_to_string("data/scheduler.json") {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let default = SchedulerConfig {
+                schedule: vec![],
+                background_image: None,
+            };
+            write(&default)?;
+            return Ok(default);
+        }
+        Err(e) => return Err(format!("Error reading scheduler.json: {}", e)),
+    };
     let mut config: SchedulerConfig = serde_json::from_str(&content)
         .map_err(|e| format!("Error parsing scheduler.json: {}", e))?;
     for day in &mut config.schedule {
