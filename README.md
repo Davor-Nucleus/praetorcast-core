@@ -1,7 +1,7 @@
 <div align="center">
   <!-- <img src="public/logo.png" alt="PraetorCast-core Logo" width="200"/> -->
 
-  # 🌐 PraetorCast-Core
+  # PraetorCast-Core
 
   **Le serveur web backend (Rust/Actix-web) pour les overlays OBS de PraetorCast.**
 
