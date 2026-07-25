@@ -43,6 +43,12 @@ struct DiscordPresenceTemplate {
 }
 
 #[derive(Template)]
+#[template(path = "channel_point.html")]
+struct ChannelPointTemplate {
+    title_font: String,
+}
+
+#[derive(Template)]
 #[template(path = "followers_info.html")]
 struct FollowersInfoTemplate {
     music_port: u16,
@@ -119,6 +125,11 @@ pub async fn emote_corner() -> impl Responder {
 pub async fn discord_presence() -> impl Responder {
     let config = load_config();
     render(DiscordPresenceTemplate { port_discord: config.port_discord }.render().unwrap())
+}
+
+pub async fn channel_point() -> impl Responder {
+    let config = load_config();
+    render(ChannelPointTemplate { title_font: font_path(&config) }.render().unwrap())
 }
 
 pub async fn followers_info() -> impl Responder {

@@ -6,7 +6,7 @@ mod models;
 mod controllers;
 mod twitch;
 
-use controllers::{banner_controller, display, music_controller, obs_controller, scheduler_controller, twitch_controller};
+use controllers::{banner_controller, channel_point_controller, display, music_controller, obs_controller, scheduler_controller, twitch_controller};
 use models::config::load_config;
 
 #[actix_web::main]
@@ -59,6 +59,15 @@ async fn main() -> std::io::Result<()> {
             .route("/api/scheduler-config", web::post().to(scheduler_controller::save))
             .route("/api/scheduler-upload", web::post().to(scheduler_controller::upload_image))
             .route("/api/scheduler-background-upload", web::post().to(scheduler_controller::upload_background))
+            // Pages channel points
+            .route("/channel-points", web::get().to(display::channel_point))
+            .route("/channel-points-config", web::get().to(channel_point_controller::page))
+            // API channel points
+            .route("/api/channel-points-config", web::get().to(channel_point_controller::get))
+            .route("/api/channel-points-config", web::post().to(channel_point_controller::save))
+            .route("/api/channel-points-upload-image", web::post().to(channel_point_controller::upload_image))
+            .route("/api/channel-points-upload-sound", web::post().to(channel_point_controller::upload_sound))
+            .route("/api/channel_point_ws", web::get().to(channel_point_controller::redemption_ws))
             // API Twitch
             .route("/api/twitch_ws", web::get().to(twitch_controller::ws_handler))
             // API OBS (limiteur sur la source audio "music")

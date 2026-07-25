@@ -94,8 +94,11 @@ public/soundboard/*
 # éviter les conflits à chaque git pull. Le défaut hors-ligne vient de banner.example.json.
 /data/banner.json
 /data/scheduler.json
+/data/channel_points.json
 
 /public/banner/*
+
+/public/channelpoint/*
 
 
 # Fichiers de cache

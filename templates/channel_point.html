@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Channel Points</title>
+    <style>
+        @font-face {
+            font-family: 'title_font';
+            src: url('{{ title_font }}') format('truetype');
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            background-color: transparent !important;
+            color: white;
+            font-family: "title_font", serif;
+            overflow: hidden;
+        }
+
+        .cp-overlay {
+            position: fixed;
+            inset: 0;
+        }
+
+        /* Une récompense occupe tout l'écran : image au-dessus, phrase en dessous. */
+        .reward-wrapper {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(1rem, 3vh, 2.5rem);
+            padding: clamp(1rem, 4vw, 4rem);
+            opacity: 0;
+        }
+
+        .reward-image {
+            height: clamp(160px, 40vh, 480px);
+            width: auto;
+            max-width: min(80vw, 900px);
+            object-fit: contain;
+            border-radius: 12px;
+        }
+
+        .reward-text {
+            margin: 0;
+            font-weight: bold;
+            line-height: 1.1;
+            text-align: center;
+            font-size: clamp(2rem, 6vw, 6rem);
+            overflow-wrap: break-word;
+            word-break: break-word;
+            text-wrap: balance;
+        }
+
+        /* Dégradé animé sur le texte (identique à la bannière) */
+        .gradient-text {
+            background: linear-gradient(to right, #c084fc, #ec4899, #c084fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            background-size: 200% auto;
+        }
+
+        .animate-gradient {
+            animation: gradient 5s ease infinite;
+        }
+
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* Aide au diagnostic hors OBS : n'apparaît que si le navigateur refuse l'autoplay. */
+        .audio-hint {
+            position: fixed;
+            left: 50%;
+            bottom: 2rem;
+            transform: translateX(-50%);
+            max-width: 90vw;
+            padding: 0.6rem 1.1rem;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.78);
+            color: #ffffff;
+            font-family: monospace;
+            font-size: 0.9rem;
+            text-align: center;
+            z-index: 10;
+        }
+
+        /* --- Transitions (classes posées par le JS : <type>-in / <type>-out) --- */
+        .reward-wrapper.fade-in   { animation: fadeIn   0.8s ease-out both; }
+        .reward-wrapper.fade-out  { animation: fadeOut  0.5s ease-in  both; }
+        .reward-wrapper.slide-in  { animation: slideIn  0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .reward-wrapper.slide-out { animation: slideOut 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .reward-wrapper.zoom-in   { animation: zoomIn   0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .reward-wrapper.zoom-out  { animation: zoomOut  0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .reward-wrapper.flip-in   { animation: flipIn   0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .reward-wrapper.flip-out  { animation: flipOut  0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+        @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+        @keyframes slideIn  { from { opacity: 0; transform: translateX(100%); }  to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideOut { from { opacity: 1; transform: translateX(0); }     to { opacity: 0; transform: translateX(-100%); } }
+
+        @keyframes zoomIn  { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+        @keyframes zoomOut { from { opacity: 1; transform: scale(1); }    to { opacity: 0; transform: scale(1.08); } }
+
+        @keyframes flipIn  { from { opacity: 0; transform: perspective(1200px) rotateX(90deg); }  to { opacity: 1; transform: perspective(1200px) rotateX(0); } }
+        @keyframes flipOut { from { opacity: 1; transform: perspective(1200px) rotateX(0); }      to { opacity: 0; transform: perspective(1200px) rotateX(-90deg); } }
+    </style>
+</head>
+<body>
+    <div class="cp-overlay" id="cpOverlay"></div>
+
+    <script>
+        // Durée d'affichage quand la récompense n'a pas de son (et filet de sécurité
+        // si le fichier audio ne charge pas dans OBS).
+        const NO_SOUND_MS = 5000;
+        // Marge ajoutée à la durée annoncée par le fichier avant de couper d'office.
+        const WATCHDOG_GRACE_MS = 1000;
+        // Doit correspondre à la durée des animations `-out` du CSS.
+        const OUT_MS = 500;
+        // Le serveur empile les redemptions tant qu'aucun overlay n'est connecté :
+        // on plafonne pour ne pas rejouer une rafale d'anciens échanges à l'ouverture.
+        const MAX_QUEUE = 10;
+
+        let rewardsByTitle = {};
+        let rewardsDelivered = false;
+        let refreshInFlight = null;
+
+        const pending = [];
+        let isPlaying = false;
+
+        // --- Configuration des récompenses -----------------------------------
+
+        function applyRewardsMap(map) {
+            rewardsByTitle = map && typeof map === 'object' ? map : {};
+        }
+
+        function applyRewardsList(list) {
+            const map = {};
+            (Array.isArray(list) ? list : []).forEach((reward) => {
+                if (reward && reward.reward_title) {
+                    map[reward.reward_title] = reward;
+                }
+            });
+            applyRewardsMap(map);
+        }
+
+        // La WS ne pousse la config qu'à la connexion : on relit le fichier via HTTP
+        // quand un titre inconnu arrive (récompense ajoutée depuis).
+        function refreshRewards() {
+            if (!refreshInFlight) {
+                refreshInFlight = fetch('/api/channel-points-config')
+                    .then((response) => (response.ok ? response.json() : []))
+                    .then(applyRewardsList)
+                    .catch((error) => console.error('Channel point config error:', error))
+                    .then(() => { refreshInFlight = null; });
+            }
+            return refreshInFlight;
+        }
+
+        async function resolveReward(title) {
+            if (rewardsByTitle[title]) return rewardsByTitle[title];
+            await refreshRewards();
+            return rewardsByTitle[title] || null;
+        }
+
+        // --- File d'attente ---------------------------------------------------
+
+        function enqueue(redemption) {
+            if (!redemption || !redemption.reward_title) return;
+            if (pending.length >= MAX_QUEUE) {
+                console.warn('File pleine, redemption ignorée:', redemption.reward_title);
+                return;
+            }
+            pending.push(redemption);
+            drainQueue();
+        }
+
+        // Une seule animation à l'écran : les échanges simultanés s'enchaînent.
+        async function drainQueue() {
+            if (isPlaying) return;
+            isPlaying = true;
+            try {
+                while (pending.length > 0) {
+                    const redemption = pending.shift();
+                    const reward = await resolveReward(redemption.reward_title);
+                    if (!reward) {
+                        console.warn('Aucune récompense configurée pour:', redemption.reward_title);
+                        continue;
+                    }
+                    await playRedemption(reward, redemption);
+                }
+            } finally {
+                isPlaying = false;
+            }
+        }
+
+        // --- Affichage --------------------------------------------------------
+
+        function getTransitionClasses(type, isIn) {
+            const base = type || 'fade';
+            return isIn ? base + '-in' : base + '-out';
+        }
+
+        // Substitue les jetons de la phrase configurée. Les accolades sont échappées
+        // dans les regex pour ne pas être interprétées comme des balises Askama.
+        function formatPhrase(phrase, redemption) {
+            return String(phrase || '')
+                .replace(/\{\{\s*user\s*\}\}/gi, () => redemption.user_name || '')
+                .replace(/\{\{\s*reward\s*\}\}/gi, () => redemption.reward_title || '')
+                .replace(/\{\{\s*input\s*\}\}/gi, () => redemption.user_input || '');
+        }
+
+        function buildWrapper(reward, redemption) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'reward-wrapper';
+
+            if (reward.imagePath && reward.imagePath.trim() !== '') {
+                const image = document.createElement('img');
+                image.className = 'reward-image';
+                image.src = reward.imagePath;
+                image.alt = '';
+                wrapper.appendChild(image);
+            }
+
+            const phrase = formatPhrase(reward.phrase, redemption).trim();
+            if (phrase) {
+                const paragraph = document.createElement('p');
+                paragraph.className = 'reward-text';
+                const span = document.createElement('span');
+                span.className = 'gradient-text animate-gradient';
+                span.textContent = phrase;
+                paragraph.appendChild(span);
+                wrapper.appendChild(paragraph);
+            }
+
+            return wrapper;
+        }
+
+        // Un navigateur classique refuse `play()` tant que l'utilisateur n'a pas
+        // interagi avec la page ; OBS, lui, l'autorise. Plutôt que de laisser une
+        // animation muette sans explication, on l'affiche à l'écran.
+        let audioHint = null;
+
+        function showAudioHint(onUnlock) {
+            if (audioHint) return;
+
+            audioHint = document.createElement('div');
+            audioHint.className = 'audio-hint';
+            audioHint.textContent = 'Son bloqué par le navigateur : cliquez sur la page pour l\'autoriser (sans objet dans OBS)';
+            document.body.appendChild(audioHint);
+
+            const unlock = () => {
+                document.removeEventListener('pointerdown', unlock);
+                document.removeEventListener('keydown', unlock);
+                if (audioHint && audioHint.parentNode) {
+                    audioHint.parentNode.removeChild(audioHint);
+                }
+                audioHint = null;
+                onUnlock();
+            };
+
+            document.addEventListener('pointerdown', unlock);
+            document.addEventListener('keydown', unlock);
+        }
+
+        // Cœur de la fonctionnalité : l'affichage dure exactement le temps du son.
+        // Le son démarre avec l'animation d'entrée et la sortie est déclenchée par
+        // l'événement `ended`. Un watchdog évite de rester bloqué si l'audio cale.
+        function holdForSound(soundPath) {
+            return new Promise((resolve) => {
+                if (!soundPath || soundPath.trim() === '') {
+                    setTimeout(resolve, NO_SOUND_MS);
+                    return;
+                }
+
+                const audio = new Audio(soundPath);
+                audio.preload = 'auto';
+                let settled = false;
+                let watchdog = null;
+
+                function finish() {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(watchdog);
+                    resolve();
+                }
+
+                function arm(delay) {
+                    clearTimeout(watchdog);
+                    watchdog = setTimeout(finish, delay);
+                }
+
+                arm(NO_SOUND_MS);
+
+                audio.addEventListener('loadedmetadata', () => {
+                    if (isFinite(audio.duration) && audio.duration > 0) {
+                        arm(audio.duration * 1000 + WATCHDOG_GRACE_MS);
+                    }
+                });
+                audio.addEventListener('ended', finish);
+                audio.addEventListener('error', finish);
+
+                audio.play().catch((error) => {
+                    console.error('Lecture du son impossible:', error);
+                    arm(NO_SOUND_MS);
+
+                    if (error && error.name === 'NotAllowedError') {
+                        // Au premier clic, on relance le son et on recale le watchdog
+                        // sur ce qu'il reste à jouer.
+                        showAudioHint(() => {
+                            audio.play().then(() => {
+                                if (isFinite(audio.duration) && audio.duration > 0) {
+                                    arm((audio.duration - audio.currentTime) * 1000 + WATCHDOG_GRACE_MS);
+                                }
+                            }).catch(() => {});
+                        });
+                    }
+                });
+            });
+        }
+
+        async function playRedemption(reward, redemption) {
+            const overlay = document.getElementById('cpOverlay');
+            const transition = reward.transition || 'fade';
+            const wrapper = buildWrapper(reward, redemption);
+
+            overlay.appendChild(wrapper);
+            requestAnimationFrame(() => {
+                wrapper.className = 'reward-wrapper ' + getTransitionClasses(transition, true);
+            });
+
+            await holdForSound(reward.soundPath);
+
+            wrapper.classList.remove(getTransitionClasses(transition, true));
+            wrapper.classList.add(getTransitionClasses(transition, false));
+            await new Promise((resolve) => setTimeout(resolve, OUT_MS));
+
+            if (wrapper.parentNode) {
+                wrapper.parentNode.removeChild(wrapper);
+            }
+        }
+
+        // --- WebSocket --------------------------------------------------------
+
+        function connectWs() {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            let ws;
+            try {
+                ws = new WebSocket(proto + '://' + location.host + '/api/channel_point_ws');
+            } catch (error) {
+                refreshRewards();
+                return;
+            }
+
+            ws.addEventListener('message', (event) => {
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch (error) {
+                    console.error('Channel point WS parse error:', error);
+                    return;
+                }
+
+                if (data.type === 'rewards') {
+                    rewardsDelivered = true;
+                    applyRewardsMap(data.rewards);
+                } else if (data.type === 'redemption') {
+                    enqueue(data.redemption);
+                }
+            });
+
+            ws.addEventListener('close', () => {
+                if (!rewardsDelivered) {
+                    refreshRewards();
+                }
+                setTimeout(connectWs, 2000);
+            });
+        }
+
+        // Déclenche une animation sans passer par Twitch :
+        // testRedemption('Un cookie ?!', 'LordRutra')
+        window.testRedemption = function (title, user, input) {
+            enqueue({
+                reward_title: title,
+                user_name: user || 'TestUser',
+                user_input: input || ''
+            });
+        };
+
+        window.addEventListener('load', connectWs);
+    </script>
+</body>
+</html>

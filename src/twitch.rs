@@ -1,17 +1,44 @@
 use std::sync::{Arc, Mutex};
 use futures_util::StreamExt;
 use reqwest::Client;
+use serde::Serialize;
 use serde_json::Value;
+use tokio::sync::broadcast;
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws";
 
-#[derive(Default)]
+/// Nombre de redemptions gardées en tampon pour un overlay momentanément à la traîne.
+const REDEMPTION_BUFFER: usize = 32;
+
+#[derive(Serialize, Clone)]
+pub struct RedemptionEvent {
+    pub reward_title: String,
+    pub user_name: String,
+    pub user_input: String,
+}
+
 pub struct TwitchState {
     pub total_followers: u64,
     pub last_follower: Option<String>,
     pub connected: bool,
+    /// Diffusion des échanges de points de chaîne : chaque overlay connecté reçoit
+    /// une copie de chaque événement. Une file drainée n'en servait qu'un seul à la
+    /// fois (deux sources ouvertes se répartissaient les redemptions), et elle
+    /// grossissait sans fin quand aucun overlay n'était connecté.
+    pub redemptions: broadcast::Sender<RedemptionEvent>,
+}
+
+impl Default for TwitchState {
+    fn default() -> Self {
+        Self {
+            total_followers: 0,
+            last_follower: None,
+            connected: false,
+            redemptions: broadcast::channel(REDEMPTION_BUFFER).0,
+        }
+    }
 }
 
 pub struct TwitchConfig {
@@ -70,7 +97,8 @@ async fn session(
                     .as_str()
                     .ok_or("session_id manquant")?
                     .to_string();
-                subscribe(client, config, &bid, &sid).await?;
+                subscribe_follow(client, config, &bid, &sid).await?;
+                subscribe_channel_points(client, config, &bid, &sid).await?;
                 subscribed = true;
                 state.lock().unwrap().connected = true;
                 println!("[Twitch] EventSub actif (session: {sid})");
@@ -87,6 +115,33 @@ async fn session(
                 g.total_followers += 1;
                 g.last_follower = Some(name.clone());
                 println!("[Twitch] Nouveau follower: {name}");
+            }
+            "notification"
+                if data["metadata"]["subscription_type"].as_str()
+                    == Some("channel.channel_points_custom_reward_redemption.add") =>
+            {
+                let event = &data["payload"]["event"];
+                let reward_title = event["reward"]["title"]
+                    .as_str()
+                    .unwrap_or("Inconnu")
+                    .to_string();
+                let user_name = event["user_name"]
+                    .as_str()
+                    .unwrap_or("Inconnu")
+                    .to_string();
+                let user_input = event["user_input"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string();
+                let sender = state.lock().unwrap().redemptions.clone();
+                // `send` échoue seulement si aucun overlay n'est connecté : dans ce
+                // cas l'événement est simplement abandonné, ce qui est voulu.
+                let _ = sender.send(RedemptionEvent {
+                    reward_title: reward_title.clone(),
+                    user_name: user_name.clone(),
+                    user_input: user_input.clone(),
+                });
+                println!("[Twitch] Point de chaîne: {reward_title} par {user_name}");
             }
             "session_reconnect" => {
                 println!("[Twitch] Reconnexion demandée par Twitch");
@@ -108,9 +163,6 @@ async fn broadcaster_id(client: &Client, config: &TwitchConfig) -> Result<String
         .send()
         .await?;
 
-    // Distinguer un problème d'authentification d'une chaîne réellement introuvable :
-    // un 401 renvoie un corps sans tableau `data`, ce qui donnait à tort
-    // « Channel introuvable » alors que le token est juste invalide/expiré.
     let status = resp.status();
     if status == reqwest::StatusCode::UNAUTHORIZED {
         return Err(
@@ -149,7 +201,7 @@ async fn followers(
     ))
 }
 
-async fn subscribe(
+async fn subscribe_follow(
     client: &Client,
     config: &TwitchConfig,
     broadcaster_id: &str,
@@ -176,12 +228,49 @@ async fn subscribe(
 
     if !resp.status().is_success() {
         return Err(format!(
-            "Souscription EventSub échouée ({}): {}",
+            "Souscription EventSub follow échouée ({}): {}",
             resp.status(),
             resp.text().await?
         )
         .into());
     }
 
+    Ok(())
+}
+
+async fn subscribe_channel_points(
+    client: &Client,
+    config: &TwitchConfig,
+    broadcaster_id: &str,
+    session_id: &str,
+) -> Result<(), BoxError> {
+    let resp = client
+        .post("https://api.twitch.tv/helix/eventsub/subscriptions")
+        .header("Client-Id", &config.client_id)
+        .header("Authorization", config.bearer())
+        .json(&serde_json::json!({
+            "type": "channel.channel_points_custom_reward_redemption.add",
+            "version": "1",
+            "condition": {
+                "broadcaster_user_id": broadcaster_id
+            },
+            "transport": {
+                "method": "websocket",
+                "session_id": session_id
+            }
+        }))
+        .send()
+        .await?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Souscription EventSub channel_points échouée ({}): {}",
+            resp.status(),
+            resp.text().await?
+        )
+        .into());
+    }
+
+    println!("[Twitch] Abonné aux points de chaîne");
     Ok(())
 }
