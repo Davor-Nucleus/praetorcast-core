@@ -2,7 +2,10 @@
 /target/
 **/*.rs.bk
 *.pdb
-Cargo.lock  # Commenter cette ligne si c'est une bibliothèque
+# Cargo.lock est VOLONTAIREMENT versionné : praetorcast-core est un binaire, le
+# verrouillage des versions garantit des builds reproductibles. Ne pas l'ignorer.
+# (L'ancienne règle « Cargo.lock  # commentaire » ne faisait rien : git ne gère pas
+#  les commentaires en fin de ligne, le motif était donc le texte entier.)
 
 # Rust cache et fichiers temporaires
 **/target/

@@ -2,15 +2,16 @@ use actix_multipart::Multipart;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use actix_ws::Message;
 use askama::Template;
-use bytes::Bytes;
-use futures_util::{StreamExt, TryStreamExt};
-use std::fs;
-use std::io::Write;
+use futures_util::StreamExt;
 use std::sync::Mutex;
 use tokio::sync::broadcast;
-use uuid::Uuid;
+use tokio::time::{sleep, Duration};
+use crate::controllers::upload::{save_upload, AUDIO_EXTENSIONS, IMAGE_EXTENSIONS};
 use crate::models::channel_point::{self, ChannelPointReward};
 use crate::twitch::TwitchState;
+
+const CHANNELPOINT_DIR: &str = "public/channelpoint";
+const CHANNELPOINT_URL: &str = "/public/channelpoint";
 
 #[derive(Template)]
 #[template(path = "channel_point_config.html")]
@@ -42,84 +43,12 @@ pub async fn save(rewards: web::Json<Vec<ChannelPointReward>>) -> impl Responder
     }
 }
 
-pub async fn upload_image(mut payload: Multipart) -> impl Responder {
-    if let Err(e) = fs::create_dir_all("public/channelpoint") {
-        eprintln!("Error creating channelpoint directory: {}", e);
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": "Failed to create directory"}));
-    }
-
-    while let Ok(Some(mut field)) = payload.try_next().await {
-        if let Some(filename) = field.content_disposition().get_filename() {
-            let ext = filename.rfind('.').map(|i| &filename[i..]).unwrap_or("").to_owned();
-            let new_filename = format!("{}{}", Uuid::new_v4(), ext);
-            let filepath = format!("public/channelpoint/{}", new_filename);
-
-            match fs::File::create(&filepath) {
-                Ok(mut file) => {
-                    while let Ok(Some(chunk)) = field.try_next().await {
-                        let bytes: Bytes = chunk;
-                        if let Err(e) = file.write_all(&bytes) {
-                            eprintln!("Error writing chunk: {}", e);
-                            return HttpResponse::InternalServerError()
-                                .json(serde_json::json!({"error": "Failed to write file"}));
-                        }
-                    }
-                    return HttpResponse::Ok().json(serde_json::json!({
-                        "success": true,
-                        "path": format!("/public/channelpoint/{}", new_filename)
-                    }));
-                }
-                Err(e) => {
-                    eprintln!("Error creating file: {}", e);
-                    return HttpResponse::InternalServerError()
-                        .json(serde_json::json!({"error": "Failed to create file"}));
-                }
-            }
-        }
-    }
-
-    HttpResponse::BadRequest().json(serde_json::json!({"error": "No file provided"}))
+pub async fn upload_image(payload: Multipart) -> impl Responder {
+    save_upload(payload, CHANNELPOINT_DIR, CHANNELPOINT_URL, IMAGE_EXTENSIONS).await
 }
 
-pub async fn upload_sound(mut payload: Multipart) -> impl Responder {
-    if let Err(e) = fs::create_dir_all("public/channelpoint") {
-        eprintln!("Error creating channelpoint directory: {}", e);
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": "Failed to create directory"}));
-    }
-
-    while let Ok(Some(mut field)) = payload.try_next().await {
-        if let Some(filename) = field.content_disposition().get_filename() {
-            let ext = filename.rfind('.').map(|i| &filename[i..]).unwrap_or("").to_owned();
-            let new_filename = format!("{}{}", Uuid::new_v4(), ext);
-            let filepath = format!("public/channelpoint/{}", new_filename);
-
-            match fs::File::create(&filepath) {
-                Ok(mut file) => {
-                    while let Ok(Some(chunk)) = field.try_next().await {
-                        let bytes: Bytes = chunk;
-                        if let Err(e) = file.write_all(&bytes) {
-                            eprintln!("Error writing chunk: {}", e);
-                            return HttpResponse::InternalServerError()
-                                .json(serde_json::json!({"error": "Failed to write file"}));
-                        }
-                    }
-                    return HttpResponse::Ok().json(serde_json::json!({
-                        "success": true,
-                        "path": format!("/public/channelpoint/{}", new_filename)
-                    }));
-                }
-                Err(e) => {
-                    eprintln!("Error creating file: {}", e);
-                    return HttpResponse::InternalServerError()
-                        .json(serde_json::json!({"error": "Failed to create file"}));
-                }
-            }
-        }
-    }
-
-    HttpResponse::BadRequest().json(serde_json::json!({"error": "No file provided"}))
+pub async fn upload_sound(payload: Multipart) -> impl Responder {
+    save_upload(payload, CHANNELPOINT_DIR, CHANNELPOINT_URL, AUDIO_EXTENSIONS).await
 }
 
 pub async fn redemption_ws(
@@ -135,18 +64,9 @@ pub async fn redemption_ws(
     // plutôt que sur le pool tokio.
     actix_web::rt::spawn(async move {
         // Envoyer la configuration des récompenses au client dès la connexion
-        let rewards_config = match crate::models::channel_point::read() {
-            Ok(rewards) => {
-                let mut map = serde_json::Map::new();
-                for r in rewards {
-                    map.insert(r.reward_title.clone(), serde_json::to_value(&r).unwrap_or_default());
-                }
-                serde_json::json!({"type": "rewards", "rewards": map}).to_string()
-            }
-            Err(_) => String::new(),
-        };
-        if !rewards_config.is_empty() {
-            let _ = session.text(rewards_config).await;
+        let mut last_rewards = rewards_message();
+        if !last_rewards.is_empty() && session.text(last_rewards.clone()).await.is_err() {
+            return;
         }
 
         // Chaque overlay connecté reçoit une copie de chaque échange.
@@ -187,9 +107,36 @@ pub async fn redemption_ws(
                         return;
                     }
                 }
+                // Relecture périodique du fichier : un « Save » dans le configurateur
+                // se reflète sans recharger la source OBS, comme pour la bannière.
+                _ = sleep(Duration::from_millis(1000)) => {
+                    let current = rewards_message();
+                    if !current.is_empty() && current != last_rewards {
+                        if session.text(current.clone()).await.is_err() {
+                            return;
+                        }
+                        last_rewards = current;
+                    }
+                }
             }
         }
     });
 
     Ok(response)
+}
+
+/// Sérialise `channel_points.json` en message `rewards`, indexé par titre exact.
+/// Renvoie une chaîne vide si le fichier est illisible : mieux vaut conserver la
+/// configuration déjà envoyée que de vider l'overlay.
+fn rewards_message() -> String {
+    match channel_point::read() {
+        Ok(rewards) => {
+            let mut map = serde_json::Map::new();
+            for r in rewards {
+                map.insert(r.reward_title.clone(), serde_json::to_value(&r).unwrap_or_default());
+            }
+            serde_json::json!({"type": "rewards", "rewards": map}).to_string()
+        }
+        Err(_) => String::new(),
+    }
 }

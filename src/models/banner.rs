@@ -60,11 +60,17 @@ pub fn read() -> Result<Vec<BannerCard>, String> {
     }).collect())
 }
 
-pub fn write(cards: Vec<BannerCard>) -> Result<(), String> {
-    let ordered: Vec<BannerCard> = cards.into_iter().enumerate()
+/// Réindexe `order` sur la position dans le tableau. Séparée de `write` pour être
+/// testable sans toucher au disque (un test qui appelait `write` écrasait la vraie
+/// configuration de l'utilisateur).
+fn reorder(cards: Vec<BannerCard>) -> Vec<BannerCard> {
+    cards.into_iter().enumerate()
         .map(|(i, mut c)| { c.order = i; c })
-        .collect();
-    let config = BannerConfig { cards: ordered };
+        .collect()
+}
+
+pub fn write(cards: Vec<BannerCard>) -> Result<(), String> {
+    let config = BannerConfig { cards: reorder(cards) };
     let json = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Error serializing: {}", e))?;
     fs::create_dir_all("data")
@@ -146,32 +152,41 @@ mod tests {
         assert_eq!(normalize_path("".to_string()), "");
     }
 
+    fn card(text: &str, order: usize) -> BannerCard {
+        BannerCard {
+            id: None,
+            text: text.to_string(),
+            image_path: "a.png".to_string(),
+            transition: "fade".to_string(),
+            order,
+            duration_ms: None,
+        }
+    }
+
     #[test]
-    fn test_write_orders_correctly() {
-        let cards = vec![
-            BannerCard {
-                id: None,
-                text: "Second".to_string(),
-                image_path: "b.png".to_string(),
-                transition: "fade".to_string(),
-                order: 99,
-                duration_ms: None,
-            },
-            BannerCard {
-                id: None,
-                text: "First".to_string(),
-                image_path: "a.png".to_string(),
-                transition: "fade".to_string(),
-                order: 42,
-                duration_ms: None,
-            },
-        ];
-        // `write` normalise l'ordre et écrit sur disque. On teste juste la logique de ré-indexation
-        // en vérifiant que la fonction renvoie la config sérialisée correctement.
-        let result = write(cards);
-        // Le test échouera s'il n'y a pas de dossier data/ (normal en CI), on vérifie juste
-        // que la logique de sérialisation tient.
-        // On ignore le résultat disque, on teste juste la logique dans read() et write()
-        assert!(result.is_ok() || result.is_err());
+    fn test_reorder_reindexes_on_position() {
+        let reordered = reorder(vec![card("Second", 99), card("First", 42)]);
+
+        assert_eq!(reordered[0].order, 0);
+        assert_eq!(reordered[1].order, 1);
+        // L'ordre du tableau fait foi, le champ `order` d'entrée est ignoré.
+        assert_eq!(reordered[0].text, "Second");
+        assert_eq!(reordered[1].text, "First");
+    }
+
+    #[test]
+    fn test_reorder_preserves_other_fields() {
+        let mut input = card("Only", 7);
+        input.duration_ms = Some(4200);
+        let reordered = reorder(vec![input]);
+
+        assert_eq!(reordered[0].order, 0);
+        assert_eq!(reordered[0].duration_ms, Some(4200));
+        assert_eq!(reordered[0].image_path, "a.png");
+    }
+
+    #[test]
+    fn test_reorder_empty() {
+        assert!(reorder(Vec::new()).is_empty());
     }
 }

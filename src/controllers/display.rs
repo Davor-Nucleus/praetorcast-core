@@ -29,11 +29,12 @@ struct MusicCurrentTemplate {
     title_font: String,
 }
 
+// Aucun de ces trois overlays ne reçoit de jeton Twitch : ils lisent l'IRC en
+// anonyme et récupèrent les badges via /api/twitch/badges.
 #[derive(Template)]
 #[template(path = "emote_corner.html")]
 struct EmoteCornerTemplate {
     twitch_channel_name: String,
-    twitch_oauth_token: String,
 }
 
 #[derive(Template)]
@@ -58,8 +59,6 @@ struct FollowersInfoTemplate {
 #[template(path = "chat_horizontal.html")]
 struct ChatHorizontalTemplate {
     twitch_channel_name: String,
-    twitch_client_id: String,
-    twitch_oauth_token: String,
     port_ws_youtube_chat: u16,
 }
 
@@ -67,8 +66,6 @@ struct ChatHorizontalTemplate {
 #[template(path = "chat_vertical.html")]
 struct ChatVerticalTemplate {
     twitch_channel_name: String,
-    twitch_client_id: String,
-    twitch_oauth_token: String,
     port_ws_youtube_chat: u16,
 }
 
@@ -117,8 +114,7 @@ pub async fn music_current() -> impl Responder {
 pub async fn emote_corner() -> impl Responder {
     let config = load_config();
     render(EmoteCornerTemplate {
-        twitch_channel_name: config.twitch_channel_name,
-        twitch_oauth_token: config.twitch_oauth_token,
+        twitch_channel_name: config.twitch_channel_name.clone(),
     }.render().unwrap())
 }
 
@@ -142,9 +138,7 @@ pub async fn followers_info() -> impl Responder {
 pub async fn chat_horizontal() -> impl Responder {
     let config = load_config();
     render(ChatHorizontalTemplate {
-        twitch_channel_name: config.twitch_channel_name,
-        twitch_client_id: config.twitch_client_id,
-        twitch_oauth_token: config.twitch_oauth_token,
+        twitch_channel_name: config.twitch_channel_name.clone(),
         port_ws_youtube_chat: config.port_ws_youtube_chat,
     }.render().unwrap())
 }
@@ -152,9 +146,7 @@ pub async fn chat_horizontal() -> impl Responder {
 pub async fn chat_vertical() -> impl Responder {
     let config = load_config();
     render(ChatVerticalTemplate {
-        twitch_channel_name: config.twitch_channel_name,
-        twitch_client_id: config.twitch_client_id,
-        twitch_oauth_token: config.twitch_oauth_token,
+        twitch_channel_name: config.twitch_channel_name.clone(),
         port_ws_youtube_chat: config.port_ws_youtube_chat,
     }.render().unwrap())
 }

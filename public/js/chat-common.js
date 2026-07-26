@@ -1,9 +1,16 @@
 // Shared globals expected from the template:
-//   TWITCH_CHANNEL_NAME, TWITCH_OAUTH_TOKEN, TWITCH_CLIENT_ID
+//   TWITCH_CHANNEL_NAME
 //   PORT_WS_YOUTUBE_CHAT
 //   MAX_MESSAGES, messages, messageTimeouts
 //   ws, ytWs, pingInterval, youtubeConnected
 //   globalBadges, channelBadges
+//
+// Règle de sécurité de ce fichier : le contenu d'un message de chat est fourni par
+// un tiers. Il n'est JAMAIS concaténé dans du HTML — tout passe par des nœuds DOM
+// (`textContent` pour le texte, propriétés pour les attributs). Aucun `innerHTML`.
+
+const DEFAULT_TWITCH_COLOR = "#9146FF";
+const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 
 function parseTags(rawTags) {
     const tags = {};
@@ -14,81 +21,117 @@ function parseTags(rawTags) {
     return tags;
 }
 
+/// Une couleur non conforme irait se poser telle quelle dans un attribut de style.
+function safeColor(value) {
+    return COLOR_PATTERN.test(value || "") ? value : DEFAULT_TWITCH_COLOR;
+}
+
+function makeImage(className, url, alt) {
+    const img = document.createElement("img");
+    img.className = className;
+    img.src = url;
+    img.alt = alt || "";
+    return img;
+}
+
+/// Renvoie la liste des badges à afficher, sous forme de données (pas de HTML).
 function parseBadges(badgesTag) {
-    if (!badgesTag) return "";
+    if (!badgesTag) return [];
     return badgesTag.split(",").map(badge => {
         const [id, version] = badge.split("/");
         const key = `${id}/${version}`;
         const url = channelBadges[key] || globalBadges[key];
-        return url ? `<img class="badge" src="${url}" alt="${id}" />` : "";
-    }).join("");
+        return url ? { url, alt: id } : null;
+    }).filter(Boolean);
 }
 
+/// Découpe le message en segments texte / emote.
+/// Les positions d'emotes de Twitch sont exprimées en POINTS DE CODE : on découpe
+/// donc sur `Array.from` et non par `substring`, qui dérive dès qu'un emoji
+/// (paire de substitution) apparaît avant une emote.
 function parseEmotes(message, emotesTag) {
-    if (!emotesTag) return message;
+    if (!emotesTag) return [{ type: "text", value: message }];
 
-    const replacements = [];
+    const chars = Array.from(message);
+    const ranges = [];
+
     emotesTag.split("/").forEach(group => {
         const [id, positions] = group.split(":");
         if (!positions) return;
         positions.split(",").forEach(pos => {
             const [start, end] = pos.split("-").map(Number);
-            const url = `https://static-cdn.jtvnw.net/emoticons/v2/${id}/default/dark/1.0`;
-            const img = `<img class="emote" src="${url}" alt="${id}" />`;
-            replacements.push({ start, end, html: img });
+            if (Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end >= start) {
+                ranges.push({ start, end, id });
+            }
         });
     });
 
-    replacements.sort((a, b) => a.start - b.start);
+    ranges.sort((a, b) => a.start - b.start);
 
-    let result = "";
-    let lastIndex = 0;
+    const segments = [];
+    let cursor = 0;
 
-    replacements.forEach(r => {
-        if (r.start > lastIndex) result += message.substring(lastIndex, r.start);
-        result += r.html;
-        lastIndex = r.end + 1;
+    ranges.forEach(range => {
+        if (range.start < cursor) return; // plages qui se chevauchent : on ignore
+        if (range.start > cursor) {
+            segments.push({ type: "text", value: chars.slice(cursor, range.start).join("") });
+        }
+        segments.push({
+            type: "emote",
+            url: `https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(range.id)}/default/dark/1.0`,
+            alt: range.id
+        });
+        cursor = range.end + 1;
     });
 
-    if (lastIndex < message.length) result += message.substring(lastIndex);
+    if (cursor < chars.length) {
+        segments.push({ type: "text", value: chars.slice(cursor).join("") });
+    }
 
-    return result;
+    return segments;
 }
 
-async function loadBadges(token, clientId, channelName) {
+/// Construit l'élément d'un message. Seul point de rendu : rien d'autre ne doit
+/// fabriquer de balises pour le chat.
+function buildMessageElement(id, badges, username, color, segments) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "message";
+    wrapper.id = `msg-${id}`;
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    badges.forEach(badge => meta.appendChild(makeImage("badge", badge.url, badge.alt)));
+
+    const name = document.createElement("span");
+    name.className = "username";
+    name.style.color = safeColor(color);
+    name.textContent = username;
+    meta.appendChild(name);
+
+    const content = document.createElement("span");
+    content.className = "message-content";
+    segments.forEach(segment => {
+        if (segment.type === "emote") {
+            content.appendChild(makeImage("emote", segment.url, segment.alt));
+        } else {
+            content.appendChild(document.createTextNode(segment.value));
+        }
+    });
+
+    wrapper.appendChild(meta);
+    wrapper.appendChild(content);
+    return wrapper;
+}
+
+async function loadBadges() {
+    // Les appels Helix sont faits côté serveur : le token Twitch ne descend jamais
+    // dans la page (voir twitch_controller::badges).
     try {
-        const authHeaders = {
-            Authorization: `Bearer ${token.replace("oauth:", "")}`,
-            "Client-Id": clientId
-        };
-
-        const globalRes = await fetch("https://api.twitch.tv/helix/chat/badges/global", { headers: authHeaders });
-        if (globalRes.ok) {
-            const data = await globalRes.json();
-            data.data.forEach(badge => {
-                badge.versions.forEach(v => {
-                    globalBadges[`${badge.set_id}/${v.id}`] = v.image_url_1x;
-                });
-            });
-        }
-
-        const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${channelName}`, { headers: authHeaders });
-        const userData = await userRes.json();
-        if (userData.data && userData.data.length > 0) {
-            const broadcasterId = userData.data[0].id;
-            const chanRes = await fetch(
-                `https://api.twitch.tv/helix/chat/badges?broadcaster_id=${broadcasterId}`,
-                { headers: authHeaders }
-            );
-            if (chanRes.ok) {
-                const cData = await chanRes.json();
-                cData.data.forEach(badge => {
-                    badge.versions.forEach(v => {
-                        channelBadges[`${badge.set_id}/${v.id}`] = v.image_url_1x;
-                    });
-                });
-            }
-        }
+        const response = await fetch("/api/twitch/badges");
+        if (!response.ok) return;
+        const data = await response.json();
+        globalBadges = data.global || {};
+        channelBadges = data.channel || {};
     } catch (e) {
         console.error("Error loading badges", e);
     }
@@ -112,55 +155,59 @@ function parseTwitchMessage(line) {
 }
 
 function addTwitchMessage(tags, username, rawMessage) {
-    const badgesHtml = parseBadges(tags["badges"]);
-    const contentHtml = parseEmotes(rawMessage, tags["emotes"]);
-    const color = tags["color"] || "#9146FF";
-
-    const fullHtml = `
-        <div class="meta">
-            ${badgesHtml}
-            <span class="username" style="color: ${color}">${username}</span>
-        </div>
-        <span class="message-content">${contentHtml}</span>
-    `;
-
+    const id = crypto.randomUUID();
     addMessage({
-        id: crypto.randomUUID(),
+        id,
         platform: "twitch",
         user: username,
-        htmlContent: fullHtml,
-        color: color,
+        node: buildMessageElement(
+            id,
+            parseBadges(tags["badges"]),
+            username,
+            tags["color"],
+            parseEmotes(rawMessage, tags["emotes"])
+        ),
         timestamp: Date.now()
     });
 }
 
-function addYouTubeMessage(msgData) {
-    const username = msgData.user;
-    const color = "#" + Math.floor(Math.random() * 16777215).toString(16);
-
-    let processedMessage = msgData.text;
-    if (window.joypixels) {
+/// JoyPixels : on convertit les raccourcis en caractères Unicode (texte) et non en
+/// balises `<img>`, pour que le résultat puisse rester dans un nœud texte.
+function shortnamesToText(text) {
+    if (window.joypixels && typeof window.joypixels.shortnameToUnicode === "function") {
         try {
-            processedMessage = window.joypixels.shortnameToImage(processedMessage);
-            processedMessage = window.joypixels.unicodeToImage(processedMessage);
+            return window.joypixels.shortnameToUnicode(text);
         } catch (e) {
             console.error("JoyPixels Error:", e);
         }
     }
+    return text;
+}
 
-    const fullHtml = `
-        <div class="meta">
-            <span class="username" style="color: ${color}">${username} (YT)</span>
-        </div>
-        <span class="message-content">${processedMessage}</span>
-    `;
+/// Le pont YouTube envoie des segments structurés (`parts`). L'ancien format à plat
+/// (`text`) reste accepté au cas où un pont non mis à jour tourne encore.
+function youtubeSegments(msgData) {
+    if (Array.isArray(msgData.parts)) {
+        return msgData.parts.map(part => {
+            if (part && part.type === "image" && part.url) {
+                return { type: "emote", url: part.url, alt: part.alt || "" };
+            }
+            return { type: "text", value: shortnamesToText(String((part && part.text) || "")) };
+        });
+    }
+    return [{ type: "text", value: shortnamesToText(String(msgData.text || "")) }];
+}
+
+function addYouTubeMessage(msgData) {
+    const id = crypto.randomUUID();
+    const username = String(msgData.user || "");
+    const color = "#" + Math.floor(Math.random() * 16777216).toString(16).padStart(6, "0");
 
     addMessage({
-        id: crypto.randomUUID(),
+        id,
         platform: "youtube",
         user: username,
-        htmlContent: fullHtml,
-        color: color,
+        node: buildMessageElement(id, [], `${username} (YT)`, color, youtubeSegments(msgData)),
         timestamp: Date.now()
     });
 }
@@ -188,34 +235,27 @@ function removeMessage(id) {
 }
 
 function renderMessages() {
-    document.getElementById("chat").innerHTML = messages.map(msg => `
-        <div class="message" id="msg-${msg.id}">
-            ${msg.htmlContent}
-        </div>
-    `).join("");
+    const chat = document.getElementById("chat");
+    if (!chat) return;
+    chat.replaceChildren(...messages.map(msg => msg.node));
 }
 
 async function connectTwitch() {
     const channel = TWITCH_CHANNEL_NAME;
-    const token = TWITCH_OAUTH_TOKEN;
-    const clientId = TWITCH_CLIENT_ID;
-
     if (!channel) return;
 
-    if (token && clientId) await loadBadges(token, clientId, channel);
+    await loadBadges();
 
     ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
 
     ws.onopen = () => {
         console.log("Twitch WS Connected");
         ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership");
-        if (token) {
-            ws.send(`PASS oauth:${token.replace("oauth:", "")}`);
-            ws.send(`NICK ${channel}`);
-        } else {
-            ws.send("PASS SCHMOOPIIE");
-            ws.send("NICK justinfan123");
-        }
+        // Connexion anonyme en lecture seule : les tags (emotes, badges,
+        // display-name, color) sont servis sans authentification, et aucun jeton
+        // n'a besoin d'exister dans la page.
+        ws.send("PASS SCHMOOPIIE");
+        ws.send("NICK justinfan123");
         ws.send(`JOIN #${channel.toLowerCase()}`);
         pingInterval = setInterval(() => ws.send("PING"), 60000);
     };
@@ -250,7 +290,7 @@ function connectYouTubeSSE() {
     ytWs.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
-            if (data.platform === "youtube" && data.user && data.text) addYouTubeMessage(data);
+            if (data.platform === "youtube" && data.user) addYouTubeMessage(data);
         } catch (e) {
             console.error("Error parsing YouTube WS message", e);
         }

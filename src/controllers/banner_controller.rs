@@ -1,12 +1,10 @@
 use actix_multipart::Multipart;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use actix_ws::Message;
 use askama::Template;
-use bytes::Bytes;
-use futures_util::TryStreamExt;
-use std::fs;
-use std::io::Write;
+use futures_util::StreamExt;
 use tokio::time::{sleep, Duration};
-use uuid::Uuid;
+use crate::controllers::upload::{save_upload, IMAGE_EXTENSIONS};
 use crate::models::banner::{self, BannerCard};
 
 #[derive(Template)]
@@ -33,27 +31,54 @@ pub async fn get() -> impl Responder {
 /// Même approche que `obs_controller::limiter_ws` : une boucle qui relit l'état
 /// (ici le fichier `banner.json`) et n'émet que sur changement.
 pub async fn banner_ws(req: HttpRequest, body: web::Payload) -> actix_web::Result<HttpResponse> {
-    let (response, mut session, _) = actix_ws::handle(&req, body)?;
+    let (response, mut session, mut stream) = actix_ws::handle(&req, body)?;
 
-    tokio::spawn(async move {
-        let mut last = String::new();
-
-        loop {
-            // En cas d'erreur de lecture, on pousse une liste vide (l'overlay
-            // affiche alors son « empty state ») plutôt que de couper le flux.
-            let snapshot = banner::read()
+    // `MessageStream` n'est pas `Send` : on spawne sur le runtime local d'actix.
+    actix_web::rt::spawn(async move {
+        // En cas d'erreur de lecture, on pousse une liste vide (l'overlay affiche
+        // alors son « empty state ») plutôt que de couper le flux.
+        let read_snapshot = || {
+            banner::read()
                 .ok()
                 .and_then(|cards| serde_json::to_string(&cards).ok())
-                .unwrap_or_else(|| "[]".to_string());
+                .unwrap_or_else(|| "[]".to_string())
+        };
 
-            if snapshot != last {
-                if session.text(snapshot.clone()).await.is_err() {
-                    break;
+        // Premier envoi immédiat : la boucle ci-dessous n'émet qu'au bout d'une
+        // seconde, l'overlay resterait vide jusque-là.
+        let mut last = read_snapshot();
+        if session.text(last.clone()).await.is_err() {
+            return;
+        }
+
+        loop {
+            tokio::select! {
+                // Sans consommer le flux entrant, la fermeture d'une source OBS passe
+                // inaperçue et les pings restent sans réponse.
+                incoming = stream.next() => match incoming {
+                    Some(Ok(Message::Ping(bytes))) => {
+                        if session.pong(&bytes).await.is_err() {
+                            return;
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None => {
+                        let _ = session.close(None).await;
+                        return;
+                    }
+                    Some(Err(_)) => return,
+                    _ => {}
+                },
+                _ = sleep(Duration::from_millis(1000)) => {
+                    let snapshot = read_snapshot();
+
+                    if snapshot != last {
+                        if session.text(snapshot.clone()).await.is_err() {
+                            return;
+                        }
+                        last = snapshot;
+                    }
                 }
-                last = snapshot;
             }
-
-            sleep(Duration::from_millis(1000)).await;
         }
     });
 
@@ -71,42 +96,6 @@ pub async fn save(cards: web::Json<Vec<BannerCard>>) -> impl Responder {
     }
 }
 
-pub async fn upload(mut payload: Multipart) -> impl Responder {
-    if let Err(e) = fs::create_dir_all("public/banner") {
-        eprintln!("Error creating banner directory: {}", e);
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": "Failed to create directory"}));
-    }
-
-    while let Ok(Some(mut field)) = payload.try_next().await {
-        if let Some(filename) = field.content_disposition().get_filename() {
-            let ext = filename.rfind('.').map(|i| &filename[i..]).unwrap_or("").to_owned();
-            let new_filename = format!("{}{}", Uuid::new_v4(), ext);
-            let filepath = format!("public/banner/{}", new_filename);
-
-            match fs::File::create(&filepath) {
-                Ok(mut file) => {
-                    while let Ok(Some(chunk)) = field.try_next().await {
-                        let bytes: Bytes = chunk;
-                        if let Err(e) = file.write_all(&bytes) {
-                            eprintln!("Error writing chunk: {}", e);
-                            return HttpResponse::InternalServerError()
-                                .json(serde_json::json!({"error": "Failed to write file"}));
-                        }
-                    }
-                    return HttpResponse::Ok().json(serde_json::json!({
-                        "success": true,
-                        "path": format!("/public/banner/{}", new_filename)
-                    }));
-                }
-                Err(e) => {
-                    eprintln!("Error creating file: {}", e);
-                    return HttpResponse::InternalServerError()
-                        .json(serde_json::json!({"error": "Failed to create file"}));
-                }
-            }
-        }
-    }
-
-    HttpResponse::BadRequest().json(serde_json::json!({"error": "No file provided"}))
+pub async fn upload(payload: Multipart) -> impl Responder {
+    save_upload(payload, "public/banner", "/public/banner", IMAGE_EXTENSIONS).await
 }

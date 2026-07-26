@@ -70,6 +70,7 @@ async fn main() -> std::io::Result<()> {
             .route("/api/channel_point_ws", web::get().to(channel_point_controller::redemption_ws))
             // API Twitch
             .route("/api/twitch_ws", web::get().to(twitch_controller::ws_handler))
+            .route("/api/twitch/badges", web::get().to(twitch_controller::badges))
             // API OBS (limiteur sur la source audio "music")
             .route("/api/obs/limiter_ws", web::get().to(obs_controller::limiter_ws))
             .route("/api/obs/limiter", web::get().to(obs_controller::get_limiter))

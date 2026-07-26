@@ -48,13 +48,13 @@ pub struct TwitchConfig {
 }
 
 impl TwitchConfig {
-    fn bearer(&self) -> String {
+    pub(crate) fn bearer(&self) -> String {
         let t = self.token.strip_prefix("oauth:").unwrap_or(&self.token);
         format!("Bearer {}", t)
     }
 }
 
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
+pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 pub async fn run(state: Arc<Mutex<TwitchState>>, config: TwitchConfig) {
     let client = Client::new();
@@ -154,7 +154,10 @@ async fn session(
     Ok(())
 }
 
-async fn broadcaster_id(client: &Client, config: &TwitchConfig) -> Result<String, BoxError> {
+pub(crate) async fn broadcaster_id(
+    client: &Client,
+    config: &TwitchConfig,
+) -> Result<String, BoxError> {
     let resp = client
         .get("https://api.twitch.tv/helix/users")
         .query(&[("login", &config.channel_name)])

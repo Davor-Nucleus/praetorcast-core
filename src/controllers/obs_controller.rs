@@ -1,4 +1,6 @@
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use actix_ws::Message;
+use futures_util::StreamExt;
 use obws::requests::filters::{Create, SetEnabled, SetSettings};
 use obws::requests::sources::SourceId;
 use obws::Client;
@@ -180,10 +182,11 @@ pub async fn limiter_ws(
     req: HttpRequest,
     body: web::Payload,
 ) -> actix_web::Result<HttpResponse> {
-    let (response, mut session, _) = actix_ws::handle(&req, body)?;
+    let (response, mut session, mut stream) = actix_ws::handle(&req, body)?;
     let config = load_config();
 
-    tokio::spawn(async move {
+    // `MessageStream` n'est pas `Send` : on spawne sur le runtime local d'actix.
+    actix_web::rt::spawn(async move {
         // État dégradé envoyé quand OBS est injoignable : déjà géré côté front
         // par setObsLimiterUI (affiche "OBS déconnecté").
         let degraded = serde_json::json!({ "enabled": null, "threshold": null }).to_string();
@@ -193,11 +196,11 @@ pub async fn limiter_ws(
         loop {
             // (Re)connexion paresseuse, réutilisée tant qu'elle tient.
             if client.is_none() {
-                client = connect(&config).await.ok();
+                client = connect(config).await.ok();
             }
 
             let snapshot = match &client {
-                Some(c) => match read_state_with_client(c, &config).await {
+                Some(c) => match read_state_with_client(c, config).await {
                     Ok((enabled, threshold)) => serde_json::json!({
                         "enabled": enabled,
                         "threshold": threshold,
@@ -215,12 +218,30 @@ pub async fn limiter_ws(
             // N'émettre que sur changement, et s'arrêter si le client est parti.
             if snapshot != last {
                 if session.text(snapshot.clone()).await.is_err() {
-                    break;
+                    return;
                 }
                 last = snapshot;
             }
 
-            sleep(Duration::from_millis(1000)).await;
+            // Attente d'un tour, interrompue si le client se manifeste. Sans lecture du
+            // flux entrant, une fermeture passait inaperçue et les pings restaient sans
+            // réponse.
+            tokio::select! {
+                _ = sleep(Duration::from_millis(1000)) => {}
+                incoming = stream.next() => match incoming {
+                    Some(Ok(Message::Ping(bytes))) => {
+                        if session.pong(&bytes).await.is_err() {
+                            return;
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None => {
+                        let _ = session.close(None).await;
+                        return;
+                    }
+                    Some(Err(_)) => return,
+                    _ => {}
+                },
+            }
         }
     });
 

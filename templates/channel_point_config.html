@@ -633,7 +633,10 @@
             ws.addEventListener('message', (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    if (data.type === 'twitch_status') {
+                    // `twitch_ws` émet {total_followers, last_follower, connected} :
+                    // il n'y a pas de champ `type`, la pastille ne passait donc
+                    // jamais au vert.
+                    if (typeof data.connected === 'boolean') {
                         const dot = document.getElementById('statusDot');
                         const text = document.getElementById('statusText');
                         if (data.connected) {

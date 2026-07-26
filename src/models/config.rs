@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 #[derive(Deserialize, Clone)]
 pub struct AppConfig {
@@ -50,11 +51,22 @@ fn default_obs_filter() -> String {
     "Limiter".to_string()
 }
 
-pub fn load_config() -> AppConfig {
-    let content = std::fs::read_to_string("env.json")
-        .expect("Impossible de lire env.json");
-    serde_json::from_str(&content)
-        .expect("Impossible de parser env.json")
+static CONFIG: OnceLock<AppConfig> = OnceLock::new();
+
+/// Charge `env.json` **une seule fois** pour toute la durée du processus.
+///
+/// Auparavant chaque handler relisait et reparsait le fichier à chaque requête :
+/// outre le coût, un `env.json` corrompu en cours de session faisait paniquer le
+/// serveur en pleine requête. `main` appelle cette fonction au démarrage, donc une
+/// configuration invalide échoue immédiatement, avec un message explicite.
+pub fn load_config() -> &'static AppConfig {
+    CONFIG.get_or_init(|| {
+        let content = std::fs::read_to_string("env.json").unwrap_or_else(|e| {
+            panic!("Impossible de lire env.json ({e}) — le serveur doit être lancé depuis le dossier qui le contient")
+        });
+        serde_json::from_str(&content)
+            .unwrap_or_else(|e| panic!("env.json est invalide : {e}"))
+    })
 }
 
 pub fn font_path(config: &AppConfig) -> String {

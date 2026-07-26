@@ -62,3 +62,95 @@ pub fn write(rewards: Vec<ChannelPointReward>) -> Result<(), String> {
     fs::write("data/channel_points.json", json)
         .map_err(|e| format!("Error writing channel_points.json: {}", e))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_path_already_public() {
+        assert_eq!(
+            normalize_path("/public/channelpoint/img.png"),
+            "/public/channelpoint/img.png"
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_channelpoint_slash() {
+        assert_eq!(
+            normalize_path("/channelpoint/son.mp3"),
+            "/public/channelpoint/son.mp3"
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_channelpoint_no_slash() {
+        assert_eq!(
+            normalize_path("channelpoint/son.mp3"),
+            "/public/channelpoint/son.mp3"
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_soundboard_is_preserved() {
+        // Un son partagé avec la soundboard ne doit pas être réécrit vers channelpoint.
+        assert_eq!(
+            normalize_path("/soundboard/rire.mp3"),
+            "/public/soundboard/rire.mp3"
+        );
+        assert_eq!(
+            normalize_path("soundboard/rire.mp3"),
+            "/public/soundboard/rire.mp3"
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_bare_filename() {
+        assert_eq!(normalize_path("img.gif"), "/public/channelpoint/img.gif");
+    }
+
+    #[test]
+    fn test_normalize_path_empty() {
+        assert_eq!(normalize_path(""), "");
+    }
+
+    #[test]
+    fn test_normalize_path_absolute_other_is_left_alone() {
+        assert_eq!(normalize_path("/autre/chemin/img.png"), "/autre/chemin/img.png");
+    }
+
+    #[test]
+    fn test_reward_roundtrip_uses_json_field_names() {
+        let json = r#"{
+            "reward_title": "Un cookie ?!",
+            "phrase": "Merci",
+            "imagePath": "a.gif",
+            "soundPath": "b.mp3",
+            "transition": "zoom"
+        }"#;
+        let reward: ChannelPointReward = serde_json::from_str(json).unwrap();
+
+        assert_eq!(reward.reward_title, "Un cookie ?!");
+        assert_eq!(reward.image_path, "a.gif");
+        assert_eq!(reward.sound_path, "b.mp3");
+        assert_eq!(reward.transition, "zoom");
+        assert_eq!(reward.duration_ms, None);
+
+        // Les clés camelCase attendues par le configurateur doivent survivre.
+        let out = serde_json::to_string(&reward).unwrap();
+        assert!(out.contains("\"imagePath\""));
+        assert!(out.contains("\"soundPath\""));
+    }
+
+    #[test]
+    fn test_reward_transition_defaults_when_absent() {
+        let json = r#"{
+            "reward_title": "X",
+            "phrase": "",
+            "imagePath": "",
+            "soundPath": ""
+        }"#;
+        let reward: ChannelPointReward = serde_json::from_str(json).unwrap();
+        assert_eq!(reward.transition, "");
+    }
+}

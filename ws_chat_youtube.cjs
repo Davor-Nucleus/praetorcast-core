@@ -37,18 +37,20 @@ function startChat() {
     });
 
     liveChat.on('chat', (chatItem) => {
-        const messageText = chatItem.message.map(part => {
-            if (part.url) {
-                return `<img src="${part.url}" alt="${part.text}" style="height: 1.5em; vertical-align: middle;" />`;
-            }
-            return part.text;
-        }).join('');
+        // On envoie des segments structurés, jamais de HTML : c'est le client qui
+        // construit le DOM. Interpoler `part.text` dans une balise permettait à
+        // n'importe quel spectateur d'injecter du script dans l'overlay.
+        const parts = chatItem.message.map(part =>
+            part.url
+                ? { type: 'image', url: part.url, alt: part.text ?? '' }
+                : { type: 'text', text: part.text ?? '' }
+        );
 
-        console.log(`${chatItem.author.name}: ${messageText}`);
+        console.log(`${chatItem.author.name}: ${parts.map(p => p.type === 'image' ? (p.alt || '[emoji]') : p.text).join('')}`);
 
         broadcast(JSON.stringify({
             user: chatItem.author.name,
-            text: messageText,
+            parts,
             platform: 'youtube'
         }));
     });

@@ -32,7 +32,6 @@
     <script src="/public/js/chat-common.js"></script>
     <script>
         const TWITCH_CHANNEL_NAME = "{{ twitch_channel_name }}";
-        const TWITCH_OAUTH_TOKEN = "{{ twitch_oauth_token }}";
         const DURATION = 5000;
         const MAX_EMOTES = 50;
         let ws = null;
@@ -125,7 +124,6 @@
 
         async function connectTwitch() {
             const channel = TWITCH_CHANNEL_NAME;
-            const token = TWITCH_OAUTH_TOKEN;
 
             if (!channel) return;
 
@@ -133,13 +131,10 @@
 
             ws.onopen = () => {
                 ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership");
-                if (token) {
-                    ws.send(`PASS oauth:${token.replace("oauth:", "")}`);
-                    ws.send(`NICK ${channel}`);
-                } else {
-                    ws.send("PASS SCHMOOPIIE");
-                    ws.send("NICK justinfan123");
-                }
+                // Lecture seule anonyme : le tag `emotes` est servi sans
+                // authentification, aucun jeton n'a à descendre dans la page.
+                ws.send("PASS SCHMOOPIIE");
+                ws.send("NICK justinfan123");
                 ws.send(`JOIN #${channel.toLowerCase()}`);
                 pingInterval = setInterval(() => ws.send("PING"), 60000);
             };
