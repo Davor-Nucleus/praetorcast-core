@@ -12,7 +12,23 @@
 
 Ce projet est un serveur web en Rust utilisant **Actix-web** et **Askama** (templates HTML compilés) qui sert de backend pour les overlays OBS **PraetorCast**. Il expose des pages d'affichage, des pages de configuration, des API REST et des WebSockets pour le pilotage en temps réel.
 
+## ✨ Fonctionnalités
+
+- **Overlays OBS prêts à l'emploi** — horloge, bannière tournante, musique en cours, emote corner, présence Discord, infos followers.
+- **Chat multi-plateformes** — chat Twitch (horizontal / vertical) et chat YouTube, avec récupération des badges Twitch.
+- **Channel Points Twitch** — overlay d'alerte + page de configuration des récompenses (image et son personnalisés par récompense).
+- **Bannière configurable** — cartes texte/image avec transition et durée, éditables depuis une page web dédiée.
+- **Planning hebdomadaire (Scheduler)** — 7 jours éditables (titre, date, horaire, jaquette, image de fond).
+- **Pilotage OBS** — contrôle du filtre Limiter (obs-websocket v5) sur une source audio : activation, seuil en dB, création automatique du filtre.
+- **Musique & soundboard** — page de configuration avec raccourcis clavier et intégration MPD.
+- **Twitch EventSub** — connexion WebSocket persistante avec reconnexion automatique (followers, channel points).
+- **Temps réel** — WebSockets pour pousser bannière, état Twitch, channel points et limiteur vers les overlays sans rafraîchissement.
+- **Uploads de médias** — images et sons envoyés depuis l'interface, stockés avec un nom UUID.
+- **Configuration à chaud** — `env.json` relu à chaque requête, aucun redémarrage nécessaire.
+
 ## 📋 Sommaire
+
+- [Fonctionnalités](#-fonctionnalités)
 
 - [Démarrage rapide](#-démarrage-rapide)
 - [Architecture](#-architecture)
