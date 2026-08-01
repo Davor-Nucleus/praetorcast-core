@@ -183,6 +183,44 @@ pub(crate) async fn broadcaster_id(
         .ok_or_else(|| format!("Channel '{}' introuvable sur Twitch", config.channel_name).into())
 }
 
+/// Nombre total d'abonnés payants.
+///
+/// Contrairement aux followers, ce compteur n'arrive pas par EventSub : il faut
+/// l'interroger. Helix renvoie le total dans `total`, sans qu'on ait à paginer la
+/// liste — d'où `first=1`.
+///
+/// Demande le scope `channel:read:subscriptions`, absent du jeton par défaut du
+/// projet : l'erreur est explicite pour que le configurateur puisse l'afficher tel
+/// quel plutôt qu'un « échec » opaque.
+pub(crate) async fn subscriber_count(
+    client: &Client,
+    config: &TwitchConfig,
+    broadcaster_id: &str,
+) -> Result<u64, BoxError> {
+    let resp = client
+        .get("https://api.twitch.tv/helix/subscriptions")
+        .query(&[("broadcaster_id", broadcaster_id), ("first", "1")])
+        .header("Client-Id", &config.client_id)
+        .header("Authorization", config.bearer())
+        .send()
+        .await?;
+
+    let status = resp.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        return Err(
+            "Le jeton n'a pas le scope « channel:read:subscriptions » — régénère \
+             TWITCH_OAUTH_TOKEN en l'ajoutant à l'URL d'autorisation"
+                .into(),
+        );
+    }
+    if !status.is_success() {
+        return Err(format!("Requête helix/subscriptions échouée (HTTP {status})").into());
+    }
+
+    let body: Value = resp.json().await?;
+    Ok(body["total"].as_u64().unwrap_or(0))
+}
+
 async fn followers(
     client: &Client,
     config: &TwitchConfig,

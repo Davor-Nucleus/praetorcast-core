@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Goal Configurator</title>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --bg-card: #1e1e1e;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --border-light: #333333;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #2563eb;
+            --accent-glow: #60a5fa;
+            --danger: #ef4444;
+            --warning: #fbbf24;
+            --success: #22c55e;
+            --spacing-sm: 0.5rem;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
+            --spacing-xl: 2rem;
+            --radius-md: 0.375rem;
+            --radius-lg: 0.5rem;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-glow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: "Instrument Sans", sans-serif;
+        }
+
+        .page-container {
+            min-height: 100vh;
+            padding: var(--spacing-xl);
+            max-width: 60rem;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            margin-bottom: var(--spacing-xl);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--spacing-md);
+        }
+
+        .page-title {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: var(--accent-glow);
+            margin-bottom: 0.25rem;
+        }
+
+        .page-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .btn {
+            padding: var(--spacing-sm) var(--spacing-lg);
+            border-radius: var(--radius-md);
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+        }
+
+        .btn-save {
+            background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin: 0 0 var(--spacing-md);
+            color: var(--accent-glow);
+        }
+
+        .card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .card-head .card-title { margin: 0; }
+
+        .card-actions {
+            display: flex;
+            gap: var(--spacing-sm);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--border-light);
+            color: var(--text-muted);
+            padding: 0.35rem 0.7rem;
+        }
+
+        .btn-ghost:hover:not(:disabled) {
+            border-color: var(--accent-primary);
+            color: var(--text-main);
+        }
+
+        .btn-ghost:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background: transparent;
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 0.35rem 0.7rem;
+        }
+
+        .btn-danger:hover {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-add {
+            width: 100%;
+            background: transparent;
+            border: 1px dashed var(--border-light);
+            color: var(--text-muted);
+            padding: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .btn-add:hover {
+            border-color: var(--accent-primary);
+            color: var(--accent-glow);
+        }
+
+        .goal-card.dimmed {
+            opacity: 0.55;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: var(--text-muted);
+            padding: var(--spacing-xl);
+            border: 1px dashed var(--border-light);
+            border-radius: var(--radius-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+            gap: var(--spacing-md);
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .control-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .input-field,
+        select.input-field {
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            color: var(--text-main);
+            padding: var(--spacing-sm) var(--spacing-md);
+            font-size: 1rem;
+            font-family: inherit;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: var(--shadow-glow);
+        }
+
+        input[type="color"].input-field {
+            padding: 0.2rem;
+            height: 2.6rem;
+            cursor: pointer;
+        }
+
+        .hint {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .toggles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-lg);
+        }
+
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+
+        .toggle input {
+            width: 1.1rem;
+            height: 1.1rem;
+            accent-color: var(--accent-primary);
+            cursor: pointer;
+        }
+
+        .banner {
+            border-radius: var(--radius-md);
+            padding: var(--spacing-sm) var(--spacing-md);
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-top: var(--spacing-md);
+        }
+
+        .banner-warn {
+            background-color: rgba(251, 191, 36, 0.12);
+            border: 1px solid var(--warning);
+            color: var(--warning);
+        }
+
+        .banner code {
+            background: rgba(0, 0, 0, 0.35);
+            padding: 0.1rem 0.35rem;
+            border-radius: 0.25rem;
+        }
+
+        /* ── Aperçu : reprend la géométrie de l'overlay ─────────────────────── */
+        .preview-stage {
+            background:
+                linear-gradient(45deg, #1a1a1a 25%, transparent 25%),
+                linear-gradient(-45deg, #1a1a1a 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #1a1a1a 75%),
+                linear-gradient(-45deg, transparent 75%, #1a1a1a 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            background-color: #0d0d0d;
+            border-radius: var(--radius-md);
+            padding: var(--spacing-lg);
+        }
+
+        .pv { --accent: #9146FF; }
+
+        .pv + .pv { margin-top: 1.5rem; }
+
+        .pv.dimmed { opacity: 0.35; }
+
+        .pv-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 1rem;
+            margin-bottom: 0.6rem;
+        }
+
+        .pv-title  { font-size: 1.6rem; font-weight: 700; }
+        .pv-nums   { font-size: 1.3rem; font-weight: 700; white-space: nowrap; }
+        .pv-cur    { color: var(--accent); }
+        .pv-sep, .pv-target { opacity: 0.75; }
+
+        .pv-track {
+            position: relative;
+            height: 1.4rem;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.55);
+            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+        }
+
+        .pv-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 999px;
+            background: linear-gradient(90deg,
+                color-mix(in srgb, var(--accent) 65%, black),
+                var(--accent));
+            box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 70%, transparent);
+            transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .pv-pct {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+        }
+
+        .status {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: var(--spacing-md);
+        }
+
+        .status.saved { color: var(--success); }
+        .status.error { color: var(--danger); }
+
+        .url-row {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-top: var(--spacing-md);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .url-row code {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-light);
+            padding: 0.3rem 0.6rem;
+            border-radius: var(--radius-md);
+            color: var(--accent-glow);
+        }
+
+        .hide { display: none; }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <header class="page-header">
+            <div>
+                <h1 class="page-title">Barre d'objectif</h1>
+                <p class="page-subtitle">Followers, abonnés ou compteur libre — mis à jour en direct dans OBS.</p>
+            </div>
+            <button class="btn btn-save" id="saveBtn" type="button">Enregistrer</button>
+        </header>
+
+        <div id="goalList"></div>
+
+        <button class="btn btn-add" id="addBtn" type="button">+ Ajouter un objectif</button>
+
+        <section class="card">
+            <h2 class="card-title">Aperçu en direct</h2>
+            <p class="hint" style="margin: -0.5rem 0 1rem;">
+                Les barres s'empilent dans l'ordre ci-dessus. Celles décochées sont
+                grisées ici et absentes de l'overlay.
+            </p>
+            <div class="preview-stage">
+                <div id="previewStack"></div>
+            </div>
+            <div class="url-row">
+                <span>Source navigateur OBS :</span>
+                <code id="overlayUrl">/goal</code>
+            </div>
+            <p class="status" id="status"></p>
+        </section>
+    </div>
+
+    <template id="goalCardTpl">
+        <section class="card goal-card">
+            <div class="card-head">
+                <h2 class="card-title js-heading"></h2>
+                <div class="card-actions">
+                    <button class="btn btn-ghost js-up"   type="button" title="Monter">↑</button>
+                    <button class="btn btn-ghost js-down" type="button" title="Descendre">↓</button>
+                    <button class="btn btn-danger js-del" type="button" title="Supprimer">Supprimer</button>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="field">
+                    <label class="control-label">Source</label>
+                    <select class="input-field js-source">
+                        <option value="followers">Followers (automatique)</option>
+                        <option value="subs">Abonnés (automatique)</option>
+                        <option value="manual">Compteur manuel</option>
+                    </select>
+                    <span class="hint js-hint"></span>
+                </div>
+
+                <div class="field">
+                    <label class="control-label">Titre affiché</label>
+                    <input class="input-field js-title" type="text" maxlength="60"
+                           placeholder="Objectif followers">
+                </div>
+
+                <div class="field">
+                    <label class="control-label">Cible</label>
+                    <input class="input-field js-target" type="number" min="0" step="1">
+                </div>
+
+                <div class="field js-manual-field">
+                    <label class="control-label">Valeur courante</label>
+                    <input class="input-field js-manual" type="number" min="0" step="1">
+                    <span class="hint">Utilisée uniquement en mode « compteur manuel ».</span>
+                </div>
+
+                <div class="field">
+                    <label class="control-label">Ligne de base</label>
+                    <input class="input-field js-baseline" type="number" min="0" step="1">
+                    <span class="hint">
+                        Retranchée du total mesuré. Mets ton total actuel pour un objectif
+                        « +50 ce stream » au lieu d'un total absolu.
+                    </span>
+                </div>
+
+                <div class="field">
+                    <label class="control-label">Couleur d'accent</label>
+                    <input class="input-field js-color" type="color">
+                </div>
+            </div>
+
+            <div class="toggles" style="margin-top: 1rem;">
+                <label class="toggle"><input type="checkbox" class="js-numbers"> Afficher les nombres</label>
+                <label class="toggle"><input type="checkbox" class="js-percent"> Afficher le pourcentage</label>
+                <label class="toggle"><input type="checkbox" class="js-visible"> Barre visible</label>
+            </div>
+
+            <div class="banner banner-warn hide js-warning"></div>
+        </section>
+    </template>
+
+    <template id="previewTpl">
+        <div class="pv">
+            <div class="pv-head">
+                <span class="pv-title"></span>
+                <span class="pv-nums">
+                    <span class="pv-cur">–</span><span class="pv-sep"> / </span><span class="pv-target"></span>
+                </span>
+            </div>
+            <div class="pv-track">
+                <div class="pv-fill"></div>
+                <div class="pv-pct"></div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+
+        const HINTS = {
+            followers: "Relevé automatiquement par la session EventSub déjà ouverte.",
+            subs:      "Interrogé toutes les 60 s, une seule fois même si plusieurs barres l'utilisent.",
+            manual:    "Aucune source externe : c'est la valeur saisie ci-dessus qui compte.",
+        };
+
+        const SOURCE_LABELS = {
+            followers: "Followers",
+            subs:      "Abonnés",
+            manual:    "Manuel",
+        };
+
+        /** Liste éditée. L'ordre du tableau est celui de l'overlay. */
+        let goals = [];
+
+        /**
+         * Totaux bruts relevés par le serveur, par source. L'aperçu applique sa
+         * propre ligne de base, donc on stocke la valeur *avant* soustraction.
+         */
+        const liveTotals = { followers: null, subs: null };
+        const liveWarnings = { followers: null, subs: null };
+
+        function newGoal() {
+            return {
+                id: crypto.randomUUID(),
+                source: "followers",
+                title: "Nouvel objectif",
+                target: 100,
+                manualCurrent: 0,
+                baseline: 0,
+                accentColor: "#9146FF",
+                showNumbers: true,
+                showPercent: true,
+                visible: true,
+            };
+        }
+
+        // Reproduit `Goal::current_from` / `percent` côté Rust, pour que l'aperçu
+        // réagisse pendant la saisie sans aller-retour serveur.
+        function previewCurrent(g) {
+            if (g.source === "manual") {
+                return Math.max(0, g.manualCurrent - g.baseline);
+            }
+            const total = liveTotals[g.source];
+            if (total === null || total === undefined) return null;
+            return Math.max(0, total - g.baseline);
+        }
+
+        function previewPercent(g, current) {
+            if (g.target === 0) return 100;
+            if (current === null) return 0;
+            return Math.min(100, Math.max(0, (current / g.target) * 100));
+        }
+
+        // ── Cartes d'édition ──────────────────────────────────────────────────
+        function buildCard(goal, index) {
+            const card = $("goalCardTpl").content.firstElementChild.cloneNode(true);
+            const q = (sel) => card.querySelector(sel);
+
+            q(".js-heading").textContent = `${index + 1}. ${SOURCE_LABELS[goal.source] ?? ""}`;
+            q(".js-source").value   = goal.source;
+            q(".js-title").value    = goal.title;
+            q(".js-target").value   = goal.target;
+            q(".js-manual").value   = goal.manualCurrent;
+            q(".js-baseline").value = goal.baseline;
+            q(".js-color").value    = goal.accentColor;
+            q(".js-numbers").checked = goal.showNumbers;
+            q(".js-percent").checked = goal.showPercent;
+            q(".js-visible").checked = goal.visible;
+
+            q(".js-hint").textContent = HINTS[goal.source] ?? "";
+            q(".js-manual-field").classList.toggle("hide", goal.source !== "manual");
+            card.classList.toggle("dimmed", !goal.visible);
+
+            const warning = liveWarnings[goal.source];
+            if (warning) {
+                q(".js-warning").textContent = warning;
+                q(".js-warning").classList.remove("hide");
+            }
+
+            // Chaque champ écrit dans le modèle puis redessine : une seule source
+            // de vérité, pas de lecture du DOM au moment d'enregistrer.
+            const bind = (sel, event, apply) =>
+                q(sel).addEventListener(event, (e) => { apply(e.target); renderAll(); });
+
+            bind(".js-source",   "change", (t) => { goal.source = t.value; });
+            bind(".js-title",    "input",  (t) => { goal.title = t.value; });
+            bind(".js-target",   "input",  (t) => { goal.target = Number(t.value) || 0; });
+            bind(".js-manual",   "input",  (t) => { goal.manualCurrent = Number(t.value) || 0; });
+            bind(".js-baseline", "input",  (t) => { goal.baseline = Number(t.value) || 0; });
+            bind(".js-color",    "input",  (t) => { goal.accentColor = t.value; });
+            bind(".js-numbers",  "change", (t) => { goal.showNumbers = t.checked; });
+            bind(".js-percent",  "change", (t) => { goal.showPercent = t.checked; });
+            bind(".js-visible",  "change", (t) => { goal.visible = t.checked; });
+
+            q(".js-up").disabled = index === 0;
+            q(".js-down").disabled = index === goals.length - 1;
+
+            q(".js-up").addEventListener("click", () => move(index, -1));
+            q(".js-down").addEventListener("click", () => move(index, +1));
+            q(".js-del").addEventListener("click", () => remove(index));
+
+            return card;
+        }
+
+        function move(index, delta) {
+            const target = index + delta;
+            if (target < 0 || target >= goals.length) return;
+            [goals[index], goals[target]] = [goals[target], goals[index]];
+            renderAll();
+        }
+
+        function remove(index) {
+            goals.splice(index, 1);
+            renderAll();
+        }
+
+        // ── Aperçu ────────────────────────────────────────────────────────────
+        function buildPreview(goal) {
+            const pv = $("previewTpl").content.firstElementChild.cloneNode(true);
+            const q = (sel) => pv.querySelector(sel);
+
+            const cur = previewCurrent(goal);
+            const pct = previewPercent(goal, cur);
+
+            pv.style.setProperty("--accent", goal.accentColor);
+            pv.classList.toggle("dimmed", !goal.visible);
+            q(".pv-title").textContent  = goal.title;
+            q(".pv-target").textContent = goal.target;
+            q(".pv-cur").textContent    = cur ?? "–";
+            q(".pv-nums").classList.toggle("hide", !goal.showNumbers);
+            q(".pv-fill").style.width   = pct + "%";
+
+            if (!goal.showPercent || cur === null) {
+                q(".pv-pct").classList.add("hide");
+            } else {
+                q(".pv-pct").textContent = pct.toFixed(pct < 10 ? 1 : 0) + " %";
+            }
+            return pv;
+        }
+
+        function renderAll() {
+            const list = $("goalList");
+            list.replaceChildren();
+
+            if (goals.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "empty-state";
+                empty.textContent = "Aucun objectif. Ajoutes-en un pour afficher une barre.";
+                list.appendChild(empty);
+            } else {
+                goals.forEach((g, i) => list.appendChild(buildCard(g, i)));
+            }
+
+            const stack = $("previewStack");
+            stack.replaceChildren();
+            goals.forEach((g) => stack.appendChild(buildPreview(g)));
+        }
+
+        function setStatus(message, kind) {
+            const el = $("status");
+            el.textContent = message;
+            el.className = "status" + (kind ? " " + kind : "");
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch("/api/goal-config");
+                if (!response.ok) throw new Error("HTTP " + response.status);
+                const loaded = await response.json();
+                // Une config héritée n'a pas d'`id` : on en pose un pour que le
+                // réordonnancement et l'aperçu puissent suivre chaque ligne.
+                goals = loaded.map((g) => ({ ...g, id: g.id || crypto.randomUUID() }));
+                renderAll();
+            } catch (e) {
+                setStatus("Chargement impossible : " + e.message, "error");
+            }
+        }
+
+        async function saveConfig() {
+            try {
+                const response = await fetch("/api/goal-config", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(goals),
+                });
+                if (!response.ok) throw new Error("HTTP " + response.status);
+                setStatus(`${goals.length} objectif(s) enregistré(s) — l'overlay se met à jour tout seul.`, "saved");
+            } catch (e) {
+                setStatus("Échec de l'enregistrement : " + e.message, "error");
+            }
+        }
+
+        // Le même flux que l'overlay : on y lit les totaux mesurés et les
+        // avertissements (jeton sans le bon scope, EventSub pas encore connecté).
+        function connect() {
+            const scheme = location.protocol === "https:" ? "wss" : "ws";
+            const ws = new WebSocket(`${scheme}://${location.host}/api/goal_ws`);
+
+            ws.onmessage = (evt) => {
+                let payload;
+                try { payload = JSON.parse(evt.data); } catch { return; }
+
+                for (const key of ["followers", "subs"]) {
+                    liveTotals[key] = null;
+                    liveWarnings[key] = null;
+                }
+
+                for (const entry of payload.goals || []) {
+                    const src = entry.config?.source;
+                    if (src !== "followers" && src !== "subs") continue;
+                    liveWarnings[src] = entry.warning ?? null;
+                    // `current` est déjà amputé de la ligne de base côté serveur ;
+                    // on la rajoute pour retrouver le total brut.
+                    liveTotals[src] = entry.current === null
+                        ? null
+                        : entry.current + (entry.config.baseline ?? 0);
+                }
+
+                renderAll();
+            };
+
+            ws.onclose = () => setTimeout(connect, 5000);
+            ws.onerror = () => ws.close();
+        }
+
+        $("addBtn").addEventListener("click", () => {
+            goals.push(newGoal());
+            renderAll();
+        });
+        $("saveBtn").addEventListener("click", saveConfig);
+
+        window.addEventListener("load", () => {
+            $("overlayUrl").textContent = location.origin + "/goal";
+            loadConfig();
+            connect();
+        });
+    </script>
+</body>
+</html>

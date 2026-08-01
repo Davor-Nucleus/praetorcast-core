@@ -6,7 +6,7 @@ mod models;
 mod controllers;
 mod twitch;
 
-use controllers::{banner_controller, channel_point_controller, display, music_controller, obs_controller, scheduler_controller, twitch_controller};
+use controllers::{banner_controller, channel_point_controller, display, goal_controller, music_controller, obs_controller, scheduler_controller, twitch_controller};
 use models::config::load_config;
 
 #[actix_web::main]
@@ -68,6 +68,12 @@ async fn main() -> std::io::Result<()> {
             .route("/api/channel-points-upload-image", web::post().to(channel_point_controller::upload_image))
             .route("/api/channel-points-upload-sound", web::post().to(channel_point_controller::upload_sound))
             .route("/api/channel_point_ws", web::get().to(channel_point_controller::redemption_ws))
+            // Barre d'objectif
+            .route("/goal", web::get().to(goal_controller::display))
+            .route("/goal-config", web::get().to(goal_controller::page))
+            .route("/api/goal-config", web::get().to(goal_controller::get))
+            .route("/api/goal-config", web::post().to(goal_controller::save))
+            .route("/api/goal_ws", web::get().to(goal_controller::goal_ws))
             // API Twitch
             .route("/api/twitch_ws", web::get().to(twitch_controller::ws_handler))
             .route("/api/twitch/badges", web::get().to(twitch_controller::badges))

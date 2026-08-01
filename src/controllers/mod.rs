@@ -1,6 +1,7 @@
 pub mod display;
 pub mod upload;
 pub mod banner_controller;
+pub mod goal_controller;
 pub mod scheduler_controller;
 pub mod music_controller;
 pub mod twitch_controller;
