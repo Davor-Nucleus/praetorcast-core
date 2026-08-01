@@ -136,7 +136,16 @@
 
             if (displayedMusic && titleElement) {
                 if (coverArt) {
-                    iconWrapper.innerHTML = `<img class="cover-art" src="${coverArt}" alt="">`;
+                    // Construction par API DOM, jamais par concaténation : `coverArt` est
+                    // une URL data: bâtie à partir du tag du fichier audio, donc d'une
+                    // source non maîtrisée. Affecté par propriété, un guillemet dans la
+                    // valeur ne peut pas sortir de l'attribut — c'est exactement le motif
+                    // corrigé dans chat-common.js.
+                    const img = document.createElement("img");
+                    img.className = "cover-art";
+                    img.src = coverArt;
+                    img.alt = "";
+                    iconWrapper.replaceChildren(img);
                 } else {
                     iconWrapper.textContent = "🎶";
                 }
@@ -152,7 +161,7 @@
                     titleElement.textContent = "";
                     titleElement.classList.remove("slide-out", "slide-in");
                 }
-                iconWrapper.innerHTML = "";
+                iconWrapper.replaceChildren();
                 iconWrapper.classList.remove("slide-out", "slide-in");
             }
 
