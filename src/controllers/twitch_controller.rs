@@ -24,12 +24,7 @@ pub async fn badges() -> impl Responder {
 }
 
 async fn fetch_badges() -> Result<Value, BoxError> {
-    let config = load_config();
-    let twitch = TwitchConfig {
-        channel_name: config.twitch_channel_name.clone(),
-        client_id: config.twitch_client_id.clone(),
-        token: config.twitch_oauth_token.clone(),
-    };
+    let twitch = TwitchConfig::from_app(&load_config());
 
     let client = reqwest::Client::new();
     let bid = broadcaster_id(&client, &twitch).await?;

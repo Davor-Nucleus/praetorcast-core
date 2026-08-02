@@ -7,3 +7,6 @@ pub mod music_controller;
 pub mod twitch_controller;
 pub mod obs_controller;
 pub mod channel_point_controller;
+pub mod settings_controller;
+pub mod auth_controller;
+pub mod theme_controller;

@@ -1,0 +1,705 @@
+{% import "partials/_macros.html" as ui -%}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Paramètres</title>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --bg-card: #1e1e1e;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --border-light: #333333;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #2563eb;
+            --accent-glow: #60a5fa;
+            --danger: #ef4444;
+            --warning: #fbbf24;
+            --success: #22c55e;
+            --spacing-sm: 0.5rem;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
+            --spacing-xl: 2rem;
+            --radius-md: 0.375rem;
+            --radius-lg: 0.5rem;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-glow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: "Instrument Sans", sans-serif;
+        }
+
+        .page-container {
+            min-height: 100vh;
+            padding: var(--spacing-xl);
+            max-width: 60rem;
+            margin: 0 auto;
+        }
+
+        {% include "partials/_header.html" %}
+
+        .btn {
+            border: none;
+            border-radius: var(--radius-md);
+            padding: 0.55rem 1.1rem;
+            font-size: 0.95rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .btn-save {
+            background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+            color: #fff;
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .btn-twitch {
+            background: #9146ff;
+            color: #fff;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-twitch:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border-light);
+        }
+
+        .btn-ghost:hover {
+            color: var(--text-main);
+            border-color: var(--accent-glow);
+        }
+
+        .status {
+            min-height: 1.4rem;
+            margin: 0 0 var(--spacing-lg);
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .status.saved { color: var(--success); }
+        .status.error { color: var(--danger); }
+        .status.warn { color: var(--warning); }
+
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+            box-shadow: var(--shadow-md);
+        }
+
+        .card-title {
+            margin: 0 0 var(--spacing-sm);
+            font-size: 1.15rem;
+        }
+
+        .card-hint {
+            margin: 0 0 var(--spacing-lg);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+            gap: var(--spacing-md);
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .field label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .field .restart-tag {
+            color: var(--warning);
+            font-size: 0.75rem;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"] {
+            background-color: #0d0d0d;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            color: var(--text-main);
+            padding: 0.5rem 0.65rem;
+            font-family: inherit;
+            font-size: 0.95rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        input[type="color"] {
+            background-color: #0d0d0d;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            width: 100%;
+            height: 2.4rem;
+            padding: 0.2rem;
+            cursor: pointer;
+        }
+
+        .checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .redirect-uri {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-top: var(--spacing-md);
+        }
+
+        .redirect-uri code {
+            background: #0d0d0d;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            padding: 0.4rem 0.6rem;
+            font-size: 0.85rem;
+            flex: 1;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .twitch-state {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .pill {
+            border-radius: 999px;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.8rem;
+            border: 1px solid var(--border-light);
+        }
+
+        .pill.ok { color: var(--success); border-color: var(--success); }
+        .pill.ko { color: var(--danger); border-color: var(--danger); }
+        .pill.warn { color: var(--warning); border-color: var(--warning); }
+
+        .shortcut-row {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+
+        .shortcut-row span {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            width: 1.2rem;
+        }
+
+        /* Aperçu : les mêmes tokens que /theme.css, appliqués localement pour que
+           l'effet soit visible avant même d'enregistrer. */
+        .preview {
+            border-radius: var(--radius-md);
+            padding: var(--spacing-lg);
+            background-color: #0d0d0d;
+            background-image:
+                linear-gradient(45deg, #1a1a1a 25%, transparent 25%),
+                linear-gradient(-45deg, #1a1a1a 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #1a1a1a 75%),
+                linear-gradient(-45deg, transparent 75%, #1a1a1a 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+
+        .preview-title {
+            font-family: var(--pc-font);
+            font-size: calc(2rem * var(--pc-font-scale));
+            font-weight: 700;
+            background: var(--pc-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .preview-bar {
+            height: 1.4rem;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.55);
+            overflow: hidden;
+        }
+
+        .preview-bar > div {
+            height: 100%;
+            width: 62%;
+            background: var(--pc-accent);
+            box-shadow: 0 0 14px var(--pc-accent);
+        }
+
+        .preview-bubble {
+            align-self: flex-start;
+            background: var(--pc-panel);
+            border-radius: var(--pc-radius-sm);
+            box-shadow: var(--pc-shadow);
+            color: var(--pc-text);
+            font-family: var(--pc-font);
+            font-size: calc(1rem * var(--pc-font-scale));
+            padding: 0.5rem 0.75rem;
+        }
+
+        .preview-bubble b { color: var(--pc-accent); }
+        .preview-muted { color: var(--pc-text-muted); font-size: 0.85rem; }
+
+        .preview-card {
+            width: 8rem;
+            height: 4rem;
+            border-radius: var(--pc-radius);
+            background: var(--pc-accent);
+            opacity: 0.85;
+        }
+    </style>
+    <!-- La police du thème est déclarée une seule fois, côté serveur. -->
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+</head>
+<body>
+    <div class="page-container">
+        {% call ui::header("Paramètres", "Configurer PraetorCast sans éditer env.json à la main", "saveAll()", "Enregistrer") %}
+
+        <p class="status" id="status"></p>
+
+        <section class="card">
+            <h2 class="card-title">Compte Twitch</h2>
+            <p class="card-hint">
+                Renseigne le <strong>nom de chaîne</strong> et le <strong>Client ID</strong> juste en dessous,
+                <strong>enregistre</strong>, puis clique sur « Connecter Twitch » : le jeton
+                (<code>TWITCH_OAUTH_TOKEN</code>) est généré et enregistré tout seul.
+                Le Client ID s'obtient en créant une application sur
+                <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noreferrer">dev.twitch.tv</a>.
+                Reclique sur le bouton quand tu veux refaire un jeton.
+            </p>
+
+            <div class="twitch-state" id="twitchState">
+                <span class="pill">État inconnu</span>
+            </div>
+
+            <a class="btn btn-twitch" id="connectBtn" href="/auth/twitch">Connecter Twitch</a>
+            <button class="btn btn-ghost" onclick="refreshTwitchStatus()">Vérifier le jeton</button>
+
+            <div class="redirect-uri">
+                <label for="redirectUri">À coller dans « URL de redirection OAuth » sur dev.twitch.tv&nbsp;:</label>
+                <code id="redirectUri">{{ redirect_uri }}</code>
+                <button class="btn btn-ghost" onclick="copyRedirect()">Copier</button>
+            </div>
+            <p class="card-hint" style="margin-top: 0.75rem;">
+                Twitch exige une correspondance exacte : sans cette URL déclarée dans ta console
+                développeur, il n'a nulle part où renvoyer le jeton.
+            </p>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">Identifiants Twitch</h2>
+            <p class="card-hint">
+                Le jeton est rempli par le bouton ci-dessus ; le champ ne sert qu'à en coller un
+                obtenu autrement. Un secret déjà enregistré s'affiche masqué : laisse-le tel quel
+                pour ne pas y toucher.
+            </p>
+            <div class="grid" id="group-twitch"></div>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">Ports des services</h2>
+            <p class="card-hint">Chaque service doit avoir son port. Un changement ici demande de redémarrer le service concerné depuis le gestionnaire.</p>
+            <div class="grid" id="group-ports"></div>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">OBS</h2>
+            <p class="card-hint">Connexion obs-websocket et nom de la source audio sur laquelle agit le limiteur. Pris en compte immédiatement.</p>
+            <div class="grid" id="group-obs"></div>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">YouTube et Discord</h2>
+            <p class="card-hint">Utilisés par les deux passerelles node. Un changement demande de les redémarrer.</p>
+            <div class="grid" id="group-external"></div>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">Interface</h2>
+            <div class="grid" id="group-ui"></div>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">Raccourcis soundboard</h2>
+            <p class="card-hint">Combinaison à presser depuis la page musique pour déclencher chaque son.</p>
+            <div class="grid" id="shortcuts"></div>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">Thème des overlays</h2>
+            <p class="card-hint">
+                Ces valeurs alimentent <code>/theme.css</code>, partagée par tous les overlays.
+                Une fois enregistrées, les sources OBS ouvertes se restylent sans avoir à les actualiser.
+            </p>
+            <div class="grid" id="theme-fields"></div>
+            <div class="preview" id="preview" style="margin-top: 1.5rem;">
+                <div class="preview-title">Titre d'overlay</div>
+                <div class="preview-bar"><div></div></div>
+                <div class="preview-bubble"><b>Viewer</b> : un message de chat</div>
+                <div class="preview-card"></div>
+                <div class="preview-muted">Texte secondaire</div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+
+        /* Métadonnées d'affichage. La liste des clés autorisées, elle, reste côté
+           serveur (models/settings.rs) : la page se contente de mettre en forme ce
+           que /api/settings lui décrit. */
+        const LABELS = {
+            TWITCH_CHANNEL_NAME: ["Nom de la chaîne", "group-twitch"],
+            TWITCH_CLIENT_ID: ["Client ID", "group-twitch"],
+            TWITCH_OAUTH_TOKEN: ["Jeton d'accès (rempli par le bouton)", "group-twitch"],
+            PORT: ["Core", "group-ports"],
+            PORT_MUSIC: ["JanusCore (musique)", "group-ports"],
+            PORT_SOUNDBOARD: ["PhonosCore (soundboard)", "group-ports"],
+            PORT_WS_YOUTUBE_CHAT: ["Chat YouTube", "group-ports"],
+            PORT_WS_DISCORD_PRESENCE: ["Présence Discord", "group-ports"],
+            OBS_WS_HOST: ["Hôte obs-websocket", "group-obs"],
+            OBS_WS_PORT: ["Port obs-websocket", "group-obs"],
+            OBS_WS_PASSWORD: ["Mot de passe obs-websocket", "group-obs"],
+            OBS_AUDIO_SOURCE: ["Source audio", "group-obs"],
+            OBS_LIMITER_FILTER: ["Nom du filtre limiteur", "group-obs"],
+            YOUTUBE_CHANNEL_ID: ["ID de chaîne YouTube", "group-external"],
+            YOUTUBE_CHAT_RETRY_DELAY_MS: ["Délai avant nouvelle tentative (ms)", "group-external"],
+            DISCORD_CLIENT_ID: ["Client ID Discord", "group-external"],
+            DISCORD_CLIENT_SECRET: ["Client Secret Discord", "group-external"],
+            FRONT_FONT_TITLE: ["Police des overlays (fichier dans public/font/)", "group-ui"],
+            janusCoreGui: ["Fenêtre de log JanusCore", "group-ui"],
+            phonosCoreGui: ["Fenêtre de log PhonosCore", "group-ui"],
+        };
+
+        const THEME_FIELDS = [
+            ["accent", "Couleur d'accent", "color"],
+            ["accentSecondary", "Accent secondaire (dégradés)", "color"],
+            ["text", "Couleur du texte", "color"],
+            ["textMuted", "Texte secondaire", "text"],
+            ["background", "Fond des overlays", "text"],
+            ["panel", "Fond des bulles et pastilles", "text"],
+            ["radius", "Rayon des bordures", "text"],
+            ["radiusSmall", "Rayon des petites bordures", "text"],
+            ["shadow", "Ombre portée", "text"],
+            ["fontFallback", "Police de repli", "text"],
+            ["fontScale", "Échelle du texte", "number"],
+        ];
+
+        /* Sources de vérité uniques : on ne relit jamais le DOM au moment
+           d'enregistrer (même approche que le configurateur d'objectifs). */
+        let settings = {};
+        let meta = {};
+        let shortcuts = {};
+        let theme = {};
+
+        function setStatus(message, kind) {
+            const el = $("status");
+            el.textContent = message;
+            el.className = "status" + (kind ? " " + kind : "");
+        }
+
+        function fieldElement(key) {
+            const [label, group] = LABELS[key];
+            const info = meta[key] || {};
+            const wrapper = document.createElement("div");
+            wrapper.className = "field";
+
+            if (info.kind === "bool") {
+                wrapper.classList.add("checkbox");
+                const input = document.createElement("input");
+                input.type = "checkbox";
+                input.id = "f-" + key;
+                input.checked = settings[key] === true;
+                input.addEventListener("change", () => { settings[key] = input.checked; });
+                const text = document.createElement("label");
+                text.htmlFor = input.id;
+                text.textContent = label;
+                wrapper.append(input, text);
+                return [wrapper, group];
+            }
+
+            const caption = document.createElement("label");
+            caption.htmlFor = "f-" + key;
+            caption.textContent = label;
+            if (info.service) {
+                const tag = document.createElement("span");
+                tag.className = "restart-tag";
+                tag.textContent = " — redémarrage : " + info.service;
+                caption.appendChild(tag);
+            }
+
+            const input = document.createElement("input");
+            input.id = "f-" + key;
+            input.type = info.kind === "secret" ? "password" : (info.kind === "port" || info.kind === "number" ? "number" : "text");
+            input.value = settings[key] === null || settings[key] === undefined ? "" : settings[key];
+            input.addEventListener("input", () => { settings[key] = input.value; });
+
+            wrapper.append(caption, input);
+            return [wrapper, group];
+        }
+
+        function renderFields() {
+            for (const id of ["group-twitch", "group-ports", "group-obs", "group-external", "group-ui"]) {
+                $(id).replaceChildren();
+            }
+            for (const key of Object.keys(LABELS)) {
+                if (!(key in meta)) continue;
+                const [element, group] = fieldElement(key);
+                $(group).appendChild(element);
+            }
+        }
+
+        function renderShortcuts() {
+            const container = $("shortcuts");
+            container.replaceChildren();
+            for (let i = 1; i <= 9; i++) {
+                const key = String(i);
+                const row = document.createElement("div");
+                row.className = "shortcut-row";
+                const caption = document.createElement("span");
+                caption.textContent = key;
+                const input = document.createElement("input");
+                input.type = "text";
+                input.value = shortcuts[key] || "";
+                input.placeholder = "alt+" + key;
+                input.addEventListener("input", () => {
+                    if (input.value.trim()) {
+                        shortcuts[key] = input.value.trim();
+                    } else {
+                        delete shortcuts[key];
+                    }
+                });
+                row.append(caption, input);
+                container.appendChild(row);
+            }
+        }
+
+        function renderTheme() {
+            const container = $("theme-fields");
+            container.replaceChildren();
+            for (const [key, label, kind] of THEME_FIELDS) {
+                const wrapper = document.createElement("div");
+                wrapper.className = "field";
+                const caption = document.createElement("label");
+                caption.htmlFor = "t-" + key;
+                caption.textContent = label;
+
+                const input = document.createElement("input");
+                input.id = "t-" + key;
+                input.type = kind;
+                if (kind === "number") {
+                    input.step = "0.05";
+                    input.min = "0.5";
+                }
+                input.value = theme[key] === undefined ? "" : theme[key];
+                input.addEventListener("input", () => {
+                    theme[key] = kind === "number" ? Number(input.value) || 1 : input.value;
+                    applyPreview();
+                });
+
+                wrapper.append(caption, input);
+                container.appendChild(wrapper);
+            }
+            applyPreview();
+        }
+
+        /* L'aperçu applique les tokens localement plutôt que de recharger
+           /theme.css : on veut voir l'effet en faisant glisser le sélecteur, avant
+           tout enregistrement. */
+        function applyPreview() {
+            const style = $("preview").style;
+            style.setProperty("--pc-accent", theme.accent || "#9146FF");
+            style.setProperty("--pc-accent-2", theme.accentSecondary || "#ec4899");
+            style.setProperty("--pc-text", theme.text || "#ffffff");
+            style.setProperty("--pc-text-muted", theme.textMuted || "rgba(255,255,255,0.65)");
+            style.setProperty("--pc-panel", theme.panel || "rgba(0,0,0,0.25)");
+            style.setProperty("--pc-radius", theme.radius || "12px");
+            style.setProperty("--pc-radius-sm", theme.radiusSmall || "4px");
+            style.setProperty("--pc-shadow", theme.shadow || "none");
+            style.setProperty("--pc-font-scale", theme.fontScale || 1);
+            style.setProperty(
+                "--pc-gradient",
+                "linear-gradient(to right, " + (theme.accent || "#9146FF") + ", " +
+                    (theme.accentSecondary || "#ec4899") + ", " + (theme.accent || "#9146FF") + ")"
+            );
+        }
+
+        async function loadAll() {
+            try {
+                const [settingsRes, themeRes] = await Promise.all([
+                    fetch("/api/settings"),
+                    fetch("/api/theme"),
+                ]);
+                if (!settingsRes.ok) throw new Error("HTTP " + settingsRes.status);
+                if (!themeRes.ok) throw new Error("HTTP " + themeRes.status);
+
+                const payload = await settingsRes.json();
+                settings = payload.values;
+                meta = payload.meta;
+                shortcuts = settings.SOUNDBOARD_SHORTCUTS || {};
+                theme = await themeRes.json();
+
+                renderFields();
+                renderShortcuts();
+                renderTheme();
+            } catch (e) {
+                setStatus("Chargement impossible : " + e.message, "error");
+            }
+        }
+
+        async function saveAll() {
+            const payload = {};
+            for (const key of Object.keys(meta)) {
+                if (key === "SOUNDBOARD_SHORTCUTS") continue;
+                // Un champ vide sur une clé optionnelle est une valeur légitime
+                // (mot de passe OBS effacé), on l'envoie tel quel.
+                payload[key] = settings[key] === null || settings[key] === undefined ? "" : settings[key];
+            }
+            payload.SOUNDBOARD_SHORTCUTS = shortcuts;
+
+            try {
+                const [settingsRes, themeRes] = await Promise.all([
+                    fetch("/api/settings", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    }),
+                    fetch("/api/theme", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(theme),
+                    }),
+                ]);
+
+                if (!settingsRes.ok) {
+                    const error = await settingsRes.json().catch(() => ({}));
+                    throw new Error(error.error || "HTTP " + settingsRes.status);
+                }
+                if (!themeRes.ok) throw new Error("Thème : HTTP " + themeRes.status);
+
+                const result = await settingsRes.json();
+                const restart = result.restart || [];
+                if (restart.length) {
+                    setStatus(
+                        "Enregistré. À redémarrer pour prendre effet : " + restart.join(", ") + ".",
+                        "warn"
+                    );
+                } else {
+                    setStatus("Enregistré — tout est pris en compte immédiatement.", "saved");
+                }
+
+                // Les secrets reviennent masqués et les valeurs sont normalisées côté
+                // serveur : on repart de ce que le fichier contient vraiment.
+                await loadAll();
+                await refreshTwitchStatus();
+            } catch (e) {
+                setStatus("Échec de l'enregistrement : " + e.message, "error");
+            }
+        }
+
+        function pill(text, kind) {
+            const el = document.createElement("span");
+            el.className = "pill" + (kind ? " " + kind : "");
+            el.textContent = text;
+            return el;
+        }
+
+        async function refreshTwitchStatus() {
+            const container = $("twitchState");
+            try {
+                const response = await fetch("/api/twitch/auth-status");
+                if (!response.ok) throw new Error("HTTP " + response.status);
+                const state = await response.json();
+
+                container.replaceChildren();
+
+                if (!state.hasClientId) {
+                    container.appendChild(pill("Client ID manquant", "ko"));
+                    $("connectBtn").style.opacity = "0.5";
+                } else {
+                    $("connectBtn").style.opacity = "1";
+                }
+
+                if (state.valid) {
+                    container.appendChild(pill("Connecté : " + (state.login || "?"), "ok"));
+                    // Un jeton Twitch vit une soixantaine de jours : on parle en
+                    // jours, des heures n'apprendraient rien d'utile.
+                    const seconds = state.expiresIn || 0;
+                    const days = Math.floor(seconds / 86400);
+                    const hours = Math.floor((seconds % 86400) / 3600);
+                    const remaining = days > 0 ? days + " j " + hours + " h" : hours + " h";
+                    // En dessous d'une semaine, on invite à recliquer sur le bouton.
+                    container.appendChild(
+                        pill("Expire dans " + remaining, seconds < 7 * 86400 ? "warn" : null)
+                    );
+                    const missing = state.scopesMissing || [];
+                    if (missing.length) {
+                        container.appendChild(pill("Droits manquants : " + missing.join(", "), "warn"));
+                    }
+                } else if (state.hasToken) {
+                    container.appendChild(pill(state.error || "Jeton invalide", "ko"));
+                } else {
+                    container.appendChild(pill("Aucun compte connecté", "ko"));
+                }
+            } catch (e) {
+                container.replaceChildren(pill("État indisponible : " + e.message, "ko"));
+            }
+        }
+
+        async function copyRedirect() {
+            try {
+                await navigator.clipboard.writeText($("redirectUri").textContent.trim());
+                setStatus("URL de redirection copiée.", "saved");
+            } catch (e) {
+                setStatus("Copie impossible : " + e.message, "error");
+            }
+        }
+
+        window.addEventListener("load", async () => {
+            await loadAll();
+            await refreshTwitchStatus();
+        });
+    </script>
+</body>
+</html>

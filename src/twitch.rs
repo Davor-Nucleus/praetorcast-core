@@ -3,7 +3,7 @@ use futures_util::StreamExt;
 use reqwest::Client;
 use serde::Serialize;
 use serde_json::Value;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Notify};
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
@@ -52,18 +52,52 @@ impl TwitchConfig {
         let t = self.token.strip_prefix("oauth:").unwrap_or(&self.token);
         format!("Bearer {}", t)
     }
+
+    /// Extrait les identifiants Twitch de la configuration courante.
+    pub fn from_app(config: &crate::models::config::AppConfig) -> Self {
+        Self {
+            channel_name: config.twitch_channel_name.clone(),
+            client_id: config.twitch_client_id.clone(),
+            token: config.twitch_oauth_token.clone(),
+        }
+    }
 }
 
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-pub async fn run(state: Arc<Mutex<TwitchState>>, config: TwitchConfig) {
+/// Boucle EventSub.
+///
+/// Les identifiants sont relus **à chaque tour** plutôt que capturés au démarrage :
+/// c'est ce qui permet à un jeton obtenu depuis `/settings` d'être pris en compte
+/// sans redémarrer le serveur. `reload` sert à couper la session en cours
+/// immédiatement après un enregistrement, au lieu d'attendre qu'elle tombe d'elle-même
+/// (ce qui, avec un jeton encore valide, pourrait ne jamais arriver).
+pub async fn run(state: Arc<Mutex<TwitchState>>, reload: Arc<Notify>) {
     let client = Client::new();
     loop {
-        if let Err(e) = session(&client, &config, &state).await {
-            eprintln!("[Twitch] Erreur: {e}");
+        let config = TwitchConfig::from_app(&crate::models::config::load_config());
+
+        if config.client_id.is_empty() || config.token.is_empty() {
+            // Première installation : inutile de marteler Twitch avec un jeton vide,
+            // on attend que la page de réglages en fournisse un.
+            println!("[Twitch] Aucun jeton configuré — en attente de /settings");
+            reload.notified().await;
+            continue;
         }
-        state.lock().unwrap().connected = false;
-        sleep(Duration::from_secs(5)).await;
+
+        tokio::select! {
+            result = session(&client, &config, &state) => {
+                if let Err(e) = result {
+                    eprintln!("[Twitch] Erreur: {e}");
+                }
+                state.lock().unwrap().connected = false;
+                sleep(Duration::from_secs(5)).await;
+            }
+            _ = reload.notified() => {
+                println!("[Twitch] Configuration modifiée — reconnexion");
+                state.lock().unwrap().connected = false;
+            }
+        }
     }
 }
 

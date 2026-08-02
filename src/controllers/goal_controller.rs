@@ -12,7 +12,7 @@ use askama::Template;
 use futures_util::StreamExt;
 use tokio::time::{sleep, Duration};
 
-use crate::models::config::{font_path, load_config};
+use crate::models::config::load_config;
 use crate::models::goal::{self, Goal, GoalSource};
 use crate::twitch::{broadcaster_id, subscriber_count, TwitchConfig, TwitchState};
 
@@ -30,11 +30,10 @@ const TICK: Duration = Duration::from_millis(1000);
 #[template(path = "goal_config.html")]
 struct GoalConfigTemplate;
 
+/// La police vient de `/theme.css`, plus d'un `@font-face` par overlay.
 #[derive(Template)]
 #[template(path = "goal.html")]
-pub struct GoalTemplate {
-    pub title_font: String,
-}
+pub struct GoalTemplate;
 
 pub async fn page() -> impl Responder {
     HttpResponse::Ok()
@@ -43,14 +42,9 @@ pub async fn page() -> impl Responder {
 }
 
 pub async fn display() -> impl Responder {
-    let config = load_config();
-    HttpResponse::Ok().content_type("text/html").body(
-        GoalTemplate {
-            title_font: font_path(config),
-        }
-        .render()
-        .unwrap(),
-    )
+    HttpResponse::Ok()
+        .content_type("text/html")
+        .body(GoalTemplate.render().unwrap())
 }
 
 pub async fn get() -> impl Responder {
@@ -90,12 +84,7 @@ async fn cached_subscriber_count() -> Result<u64, String> {
         }
     }
 
-    let app = load_config();
-    let twitch = TwitchConfig {
-        channel_name: app.twitch_channel_name.clone(),
-        client_id: app.twitch_client_id.clone(),
-        token: app.twitch_oauth_token.clone(),
-    };
+    let twitch = TwitchConfig::from_app(&load_config());
 
     let client = reqwest::Client::new();
     let fresh = async {

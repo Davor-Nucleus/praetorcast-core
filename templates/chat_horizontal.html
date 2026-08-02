@@ -3,13 +3,18 @@
 <head>
     <meta charset="utf-8">
     <title>Chat Horizontal</title>
+    <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
     <style>
         body {
             margin: 0;
             padding: 0;
-            background-color: transparent !important;
+            background-color: var(--pc-bg) !important;
             overflow: hidden;
-            font-family: "Open Sans", sans-serif;
+            /* "Open Sans" n'était jamais chargée : la pile du thème s'applique. */
+            font-family: var(--pc-font);
+            font-size: calc(1rem * var(--pc-font-scale));
         }
 
         .container {
@@ -35,12 +40,13 @@
 
         .message {
             flex: 0 0 auto;
-            background-color: rgba(0, 0, 0, 0.2);
+            background-color: var(--pc-panel);
             padding: 8px;
-            border-radius: 4px;
+            border-radius: var(--pc-radius-sm);
+            box-shadow: var(--pc-shadow);
             max-width: 300px;
             min-width: 200px;
-            color: #efeff1;
+            color: var(--pc-text);
             white-space: normal;
             overflow-wrap: break-word;
             height: auto;
@@ -81,7 +87,6 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            font-family: sans-serif;
             margin-left: 0.25rem;
         }
 

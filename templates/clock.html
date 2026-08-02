@@ -3,14 +3,9 @@
 <head>
     <meta charset="utf-8">
     <title>Horloge en direct</title>
-    {% if title_font != "" %}
-    <style>
-        @font-face {
-            font-family: 'title_font';
-            src: url('{{ title_font }}') format('truetype');
-        }
-    </style>
-    {% endif %}
+    <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
     <style>
         body {
             margin: 0;
@@ -19,16 +14,18 @@
             justify-content: flex-start;
             align-items: center;
             height: 100vh;
+            /* Fond opaque assumé : cet overlay est prévu pour être utilisé en
+               plein écran, pas incrusté sur la vidéo. */
             background-color: black;
-            color: white;
-            font-family: "Impact", sans-serif;
+            color: var(--pc-text);
+            font-family: var(--pc-font);
             padding-left: 2rem;
         }
         h1 {
-            font-size: 2.5em;
+            font-size: calc(2.5em * var(--pc-font-scale));
             text-align: center;
-            font-family: {% if title_font != "" %}"title_font", {% endif %}"Impact", sans-serif;
-            color: white;
+            font-family: var(--pc-font);
+            color: var(--pc-text);
         }
         @media (max-width: 768px) {
             h1 {

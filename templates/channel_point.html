@@ -4,12 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Channel Points</title>
+    <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
     <style>
-        @font-face {
-            font-family: 'title_font';
-            src: url('{{ title_font }}') format('truetype');
-        }
-
         *, *::before, *::after { box-sizing: border-box; }
 
         html, body {
@@ -20,9 +18,9 @@
         }
 
         body {
-            background-color: transparent !important;
-            color: white;
-            font-family: "title_font", serif;
+            background-color: var(--pc-bg) !important;
+            color: var(--pc-text);
+            font-family: var(--pc-font);
             overflow: hidden;
         }
 
@@ -49,7 +47,7 @@
             width: auto;
             max-width: min(80vw, 900px);
             object-fit: contain;
-            border-radius: 12px;
+            border-radius: var(--pc-radius);
         }
 
         .reward-text {
@@ -57,15 +55,15 @@
             font-weight: bold;
             line-height: 1.1;
             text-align: center;
-            font-size: clamp(2rem, 6vw, 6rem);
+            font-size: calc(clamp(2rem, 6vw, 6rem) * var(--pc-font-scale));
             overflow-wrap: break-word;
             word-break: break-word;
             text-wrap: balance;
         }
 
-        /* Dégradé animé sur le texte (identique à la bannière) */
+        /* Dégradé animé sur le texte (identique à la bannière : même token) */
         .gradient-text {
-            background: linear-gradient(to right, #c084fc, #ec4899, #c084fc);
+            background: var(--pc-gradient);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;

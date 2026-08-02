@@ -3,23 +3,21 @@
 <head>
     <meta charset="utf-8">
     <title>Objectif</title>
+    <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
     <style>
-        @font-face {
-            font-family: "TitleFont";
-            src: url("{{ title_font }}");
-        }
-
         html, body {
             margin: 0;
             padding: 0;
             /* Fond transparent : la source navigateur OBS se superpose à la scène. */
-            background: transparent;
+            background: var(--pc-bg);
             overflow: hidden;
         }
 
         #goals {
-            font-family: "TitleFont", sans-serif;
-            color: #ffffff;
+            font-family: var(--pc-font);
+            color: var(--pc-text);
             padding: 1.4rem 1.8rem;
             display: flex;
             flex-direction: column;
@@ -34,7 +32,9 @@
         }
 
         .goal {
-            --accent: #9146FF;
+            /* Couleur du thème par défaut ; une barre peut la surcharger depuis sa
+               propre configuration (`accentColor`). */
+            --accent: var(--pc-accent);
         }
 
         .goal-head {
@@ -46,17 +46,17 @@
         }
 
         .goal-title {
-            font-size: 2.1rem;
+            font-size: calc(2.1rem * var(--pc-font-scale));
             font-weight: 700;
             letter-spacing: 0.02em;
-            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
+            text-shadow: var(--pc-shadow);
         }
 
         .goal-numbers {
-            font-size: 1.7rem;
+            font-size: calc(1.7rem * var(--pc-font-scale));
             font-weight: 700;
             white-space: nowrap;
-            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
+            text-shadow: var(--pc-shadow);
         }
 
         .goal-current {
@@ -213,7 +213,13 @@
             const percent = entry.percent;
             const el      = bar.el;
 
-            bar.style.setProperty("--accent", cfg.accentColor || "#9146FF");
+            // Sans couleur propre, la barre retombe sur l'accent du thème plutôt
+            // que sur une valeur codée en dur : retirer la surcharge suffit.
+            if (cfg.accentColor) {
+                bar.style.setProperty("--accent", cfg.accentColor);
+            } else {
+                bar.style.removeProperty("--accent");
+            }
 
             el.title.textContent   = cfg.title || "";
             el.target.textContent  = cfg.target ?? 0;

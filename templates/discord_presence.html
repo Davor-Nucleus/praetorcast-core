@@ -3,13 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <title>Discord Voice Overlay</title>
+  <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
+  <link id="pc-theme" rel="stylesheet" href="/theme.css">
+  <script src="/public/js/theme-live.js" defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      background: transparent;
+      background: var(--pc-bg);
       overflow: hidden;
-      font-family: 'gg sans', 'Noto Sans', Whitney, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      /* La pile Discord ('gg sans', Whitney…) n'est installée nulle part : on
+         retombait déjà sur la police système, autant suivre le thème. */
+      font-family: var(--pc-font);
     }
 
     #participants {
@@ -95,21 +100,21 @@
     }
 
     .username {
-      font-size: 15px;
+      font-size: calc(15px * var(--pc-font-scale));
       font-weight: 700;
-      color: rgba(255,255,255,0.75);
+      color: var(--pc-text-muted);
       white-space: nowrap;
       max-width: 170px;
       overflow: hidden;
       text-overflow: ellipsis;
       text-align: center;
-      text-shadow: 0 1px 8px rgba(0,0,0,1);
+      text-shadow: var(--pc-shadow);
       letter-spacing: 0.02em;
       transition: color 0.15s ease;
     }
 
     .participant.speaking .username {
-      color: #fff;
+      color: var(--pc-text);
     }
 
     .participant.muted .avatar {

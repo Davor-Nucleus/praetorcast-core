@@ -183,7 +183,6 @@ pub async fn limiter_ws(
     body: web::Payload,
 ) -> actix_web::Result<HttpResponse> {
     let (response, mut session, mut stream) = actix_ws::handle(&req, body)?;
-    let config = load_config();
 
     // `MessageStream` n'est pas `Send` : on spawne sur le runtime local d'actix.
     actix_web::rt::spawn(async move {
@@ -194,13 +193,17 @@ pub async fn limiter_ws(
         let mut last = String::new();
 
         loop {
+            // Relue à chaque tour : une modification des réglages OBS depuis
+            // /settings doit être prise en compte sans rouvrir la source OBS.
+            let config = load_config();
+
             // (Re)connexion paresseuse, réutilisée tant qu'elle tient.
             if client.is_none() {
-                client = connect(config).await.ok();
+                client = connect(&config).await.ok();
             }
 
             let snapshot = match &client {
-                Some(c) => match read_state_with_client(c, config).await {
+                Some(c) => match read_state_with_client(c, &config).await {
                     Ok((enabled, threshold)) => serde_json::json!({
                         "enabled": enabled,
                         "threshold": threshold,

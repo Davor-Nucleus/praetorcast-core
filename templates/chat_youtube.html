@@ -3,20 +3,27 @@
 <head>
     <meta charset="utf-8">
     <title>Chat YouTube</title>
+    <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
     <style>
+        /* Cette page est un panneau de contrôle autour de l'iframe YouTube, pas une
+           incrustation : elle garde son fond opaque et n'emprunte au thème que
+           l'accent et la police. */
         :root {
             --bg-dark: #0a0a0a;
             --text-main: #fff;
             --bg-panel: #171717;
             --border-light: #333;
             --bg-input: #000;
-            --accent-primary: #9333ea;
+            --accent-primary: var(--pc-accent);
             --text-muted: #666;
         }
 
         body {
             background-color: var(--bg-dark);
             color: var(--text-main);
+            font-family: var(--pc-font);
             margin: 0;
             overflow: hidden;
         }

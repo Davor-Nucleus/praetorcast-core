@@ -1,7 +1,11 @@
 use actix_web::{web, HttpResponse, Responder};
 use askama::Template;
 use serde::Deserialize;
-use crate::models::config::{font_path, load_config};
+use crate::models::config::load_config;
+
+// La police des overlays n'est plus passée template par template : elle est
+// déclarée une seule fois dans `/theme.css` (cf. `models::theme`), ce qui évite
+// d'avoir six `@font-face` à maintenir en parallèle.
 
 #[derive(Template)]
 #[template(path = "index.html")]
@@ -10,7 +14,6 @@ struct IndexTemplate;
 #[derive(Template)]
 #[template(path = "clock.html")]
 struct ClockTemplate {
-    title_font: String,
     format_hour: bool,
     format_minute: bool,
     format_second: bool,
@@ -18,15 +21,12 @@ struct ClockTemplate {
 
 #[derive(Template)]
 #[template(path = "banner.html")]
-struct BannerTemplate {
-    title_font: String,
-}
+struct BannerTemplate;
 
 #[derive(Template)]
 #[template(path = "music_current.html")]
 struct MusicCurrentTemplate {
     music_port: u16,
-    title_font: String,
 }
 
 // Aucun de ces trois overlays ne reçoit de jeton Twitch : ils lisent l'IRC en
@@ -45,9 +45,7 @@ struct DiscordPresenceTemplate {
 
 #[derive(Template)]
 #[template(path = "channel_point.html")]
-struct ChannelPointTemplate {
-    title_font: String,
-}
+struct ChannelPointTemplate;
 
 #[derive(Template)]
 #[template(path = "followers_info.html")]
@@ -89,9 +87,7 @@ pub async fn index() -> impl Responder {
 }
 
 pub async fn clock(query: web::Query<ClockQuery>) -> impl Responder {
-    let config = load_config();
     render(ClockTemplate {
-        title_font: font_path(&config),
         format_hour: query.hour.unwrap_or(true),
         format_minute: query.minute.unwrap_or(true),
         format_second: query.second.unwrap_or(true),
@@ -99,15 +95,13 @@ pub async fn clock(query: web::Query<ClockQuery>) -> impl Responder {
 }
 
 pub async fn banner() -> impl Responder {
-    let config = load_config();
-    render(BannerTemplate { title_font: font_path(&config) }.render().unwrap())
+    render(BannerTemplate.render().unwrap())
 }
 
 pub async fn music_current() -> impl Responder {
     let config = load_config();
     render(MusicCurrentTemplate {
         music_port: config.port_music,
-        title_font: font_path(&config),
     }.render().unwrap())
 }
 
@@ -124,8 +118,7 @@ pub async fn discord_presence() -> impl Responder {
 }
 
 pub async fn channel_point() -> impl Responder {
-    let config = load_config();
-    render(ChannelPointTemplate { title_font: font_path(&config) }.render().unwrap())
+    render(ChannelPointTemplate.render().unwrap())
 }
 
 pub async fn followers_info() -> impl Responder {

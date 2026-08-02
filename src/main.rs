@@ -1,12 +1,14 @@
 use actix_files::Files;
 use actix_web::{web, App, HttpServer};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use tokio::sync::Notify;
 
 mod models;
 mod controllers;
 mod twitch;
+mod twitch_auth;
 
-use controllers::{banner_controller, channel_point_controller, display, goal_controller, music_controller, obs_controller, scheduler_controller, twitch_controller};
+use controllers::{auth_controller, banner_controller, channel_point_controller, display, goal_controller, music_controller, obs_controller, scheduler_controller, settings_controller, theme_controller, twitch_controller};
 use models::config::load_config;
 
 #[actix_web::main]
@@ -14,17 +16,17 @@ async fn main() -> std::io::Result<()> {
     let config = load_config();
     let port = config.port;
 
-    let twitch_cfg = twitch::TwitchConfig {
-        channel_name: config.twitch_channel_name.clone(),
-        client_id: config.twitch_client_id.clone(),
-        token: config.twitch_oauth_token.clone(),
-    };
-
     let twitch_data = web::Data::new(Mutex::new(twitch::TwitchState::default()));
     let bg_state = twitch_data.clone().into_inner();
 
+    // Réveille la session EventSub quand les identifiants Twitch changent, qu'ils
+    // viennent de /settings ou du renouvellement automatique du jeton.
+    let reload = Arc::new(Notify::new());
+    let reload_data = web::Data::new(reload.clone());
+
+    let twitch_reload = reload.clone();
     tokio::spawn(async move {
-        twitch::run(bg_state, twitch_cfg).await;
+        twitch::run(bg_state, twitch_reload).await;
     });
 
     println!("Serveur en cours d'exécution sur http://127.0.0.1:{}", port);
@@ -32,6 +34,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(twitch_data.clone())
+            .app_data(reload_data.clone())
             // Fichiers statiques
             .service(Files::new("/public", "./public"))
             // Pages d'affichage
@@ -74,6 +77,21 @@ async fn main() -> std::io::Result<()> {
             .route("/api/goal-config", web::get().to(goal_controller::get))
             .route("/api/goal-config", web::post().to(goal_controller::save))
             .route("/api/goal_ws", web::get().to(goal_controller::goal_ws))
+            // Paramètres (env.json)
+            .route("/settings", web::get().to(settings_controller::page))
+            .route("/api/settings", web::get().to(settings_controller::get))
+            .route("/api/settings", web::post().to(settings_controller::save))
+            // Connexion Twitch (implicit grant : le jeton arrive dans le fragment,
+            // d'où la page de retour qui le repost sur /auth/twitch/token)
+            .route("/auth/twitch", web::get().to(auth_controller::start))
+            .route("/auth/callback", web::get().to(auth_controller::callback))
+            .route("/auth/twitch/token", web::post().to(auth_controller::submit_token))
+            .route("/api/twitch/auth-status", web::get().to(auth_controller::status))
+            // Thème global des overlays
+            .route("/theme.css", web::get().to(theme_controller::css))
+            .route("/api/theme", web::get().to(theme_controller::get))
+            .route("/api/theme", web::post().to(theme_controller::save))
+            .route("/api/theme_ws", web::get().to(theme_controller::theme_ws))
             // API Twitch
             .route("/api/twitch_ws", web::get().to(twitch_controller::ws_handler))
             .route("/api/twitch/badges", web::get().to(twitch_controller::badges))

@@ -4,12 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Banner</title>
+    <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
     <style>
-        @font-face {
-            font-family: 'title_font';
-            src: url('{{ title_font }}') format('truetype');
-        }
-
         *, *::before, *::after { box-sizing: border-box; }
 
         html, body {
@@ -20,9 +18,10 @@
         }
 
         body {
+            /* Bannière plein écran : fond opaque assumé. */
             background-color: black;
-            color: white;
-            font-family: "title_font", serif;
+            color: var(--pc-text);
+            font-family: var(--pc-font);
             overflow: hidden;
         }
 
@@ -70,7 +69,7 @@
             width: auto;
             max-width: min(42vw, 520px);
             object-fit: contain;
-            border-radius: 12px;
+            border-radius: var(--pc-radius);
         }
 
         /* Section texte */
@@ -116,7 +115,7 @@
 
         /* Dégradé animé sur le texte */
         .gradient-text {
-            background: linear-gradient(to right, #c084fc, #ec4899, #c084fc);
+            background: var(--pc-gradient);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
@@ -160,7 +159,7 @@
             align-items: center;
             justify-content: center;
             height: 100vh;
-            color: rgba(255, 255, 255, 0.5);
+            color: var(--pc-text-muted);
             font-family: monospace;
             font-size: 1.25rem;
         }

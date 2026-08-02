@@ -3,6 +3,9 @@
 <head>
     <meta charset="utf-8">
     <title>Followers Info</title>
+    <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
     <style>
         body {
             margin: 0;
@@ -10,10 +13,12 @@
         }
 
         main {
+            /* Panneau lisible, pas une incrustation : fond opaque conservé. */
             background-color: #0a0a0a;
-            color: #ffffff;
+            color: var(--pc-text);
             min-height: 100vh;
-            font-family: sans-serif;
+            font-family: var(--pc-font);
+            font-size: calc(1rem * var(--pc-font-scale));
         }
 
         div {
