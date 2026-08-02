@@ -1,3 +1,4 @@
+{% import "partials/_macros.html" as ui -%}
 <!DOCTYPE html>
 <html>
 <head>
@@ -24,6 +25,8 @@
             box-sizing: border-box;
             font-family: "Instrument Sans", sans-serif;
         }
+
+        {% include "partials/_header.html" %}
 
         .section {
             width: 100%;
@@ -178,27 +181,7 @@
             border-radius: 5px;
         }
 
-        .back-link {
-            width: 100%;
-            max-width: 100%;
-            display: flex;
-            justify-content: flex-end;
-            padding: 0 4px;
-            box-sizing: border-box;
-        }
 
-        .back-link a {
-            color: #7aa2f7;
-            text-decoration: none;
-            font-size: 0.8rem;
-            border: 1px solid rgba(122, 162, 247, 0.3);
-            padding: 5px 10px;
-            border-radius: 5px;
-        }
-
-        .back-link a:hover {
-            background: rgba(122, 162, 247, 0.1);
-        }
 
         .btn-norm-on {
             background: linear-gradient(135deg, #9ece6a 0%, #5a9e3a 100%);
@@ -252,9 +235,9 @@
 </head>
 <body>
     <div class="container">
-        <div class="back-link">
-            <a href="/">Back Home</a>
-        </div>
+        
+        {% call ui::header("","","","") %}
+
 
         <!-- Top Audio Controls -->
         <div class="section audio-section">

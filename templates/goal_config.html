@@ -1,3 +1,4 @@
+{% import "partials/_macros.html" as ui -%}
 <!DOCTYPE html>
 <html>
 <head>
@@ -41,25 +42,7 @@
             margin: 0 auto;
         }
 
-        .page-header {
-            margin-bottom: var(--spacing-xl);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: var(--spacing-md);
-        }
-
-        .page-title {
-            font-size: 1.875rem;
-            font-weight: 700;
-            color: var(--accent-glow);
-            margin-bottom: 0.25rem;
-        }
-
-        .page-subtitle {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-        }
+        {% include "partials/_header.html" %}
 
         .btn {
             padding: var(--spacing-sm) var(--spacing-lg);
@@ -355,13 +338,9 @@
 </head>
 <body>
     <div class="page-container">
-        <header class="page-header">
-            <div>
-                <h1 class="page-title">Barre d'objectif</h1>
-                <p class="page-subtitle">Followers, abonnés ou compteur libre — mis à jour en direct dans OBS.</p>
-            </div>
-            <button class="btn btn-save" id="saveBtn" type="button">Enregistrer</button>
-        </header>
+       
+        {% call ui::header("Configuration des Objectifs", "Gérer les objectifs et leurs paramètres" , "saveConfig()", "Sauvegarder") %}
+
 
         <div id="goalList"></div>
 

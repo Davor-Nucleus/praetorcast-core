@@ -1,0 +1,21 @@
+{%- macro header(title, subtitle, save_action, save_label) -%}
+
+<header class="page-header">
+    <div>
+        {%- if title != "" %}
+        <h1 class="page-title">{{ title }}</h1>
+        {%- endif %}
+        {%- if subtitle != "" %}
+        <p class="page-subtitle">{{ subtitle }}</p>
+        {%- endif %}
+    </div>
+
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <a href="/" class="home-link">Retour à l'accueil</a>
+        {%- if save_action != "" && save_label != "" %}
+        <button onclick="{{save_action}}" class="btn btn-save">{{save_label}}</button>
+        {%- endif %}
+    </div>
+</header>
+
+{%- endmacro %}

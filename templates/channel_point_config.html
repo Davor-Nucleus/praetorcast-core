@@ -1,3 +1,4 @@
+{% import "partials/_macros.html" as ui -%}
 <!DOCTYPE html>
 <html>
 <head>
@@ -40,24 +41,7 @@
             padding: var(--spacing-xl);
         }
 
-        .page-header {
-            margin-bottom: var(--spacing-xl);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .page-title {
-            font-size: 1.875rem;
-            font-weight: 700;
-            color: var(--accent-glow);
-            margin-bottom: 0.25rem;
-        }
-
-        .page-subtitle {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-        }
+        {% include "partials/_header.html" %}
 
         .btn {
             padding: var(--spacing-sm) var(--spacing-lg);
@@ -317,51 +301,12 @@
             color: var(--accent-glow);
         }
 
-        .status-dot {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 6px;
-        }
-
-        .status-connected {
-            background-color: var(--accent-green);
-            box-shadow: 0 0 6px var(--accent-green);
-        }
-
-        .status-disconnected {
-            background-color: var(--danger);
-        }
-
-        .twitch-status {
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-sm);
-            padding: var(--spacing-sm) var(--spacing-md);
-            background-color: var(--bg-card);
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border-light);
-            font-size: 0.8rem;
-        }
     </style>
 </head>
 <body>
     <div class="page-container">
-        <header class="page-header">
-            <div>
-                <h1 class="page-title">Channel Points Configurator</h1>
-                <p class="page-subtitle">Configurez les récompenses de points de chaîne Twitch.</p>
-            </div>
-            <div style="display: flex; gap: 1rem; align-items: center;">
-                <div class="twitch-status" id="twitchStatus">
-                    <span class="status-dot status-disconnected" id="statusDot"></span>
-                    <span id="statusText">Twitch: Déconnecté</span>
-                </div>
-                <a href="/" style="color: var(--text-muted); text-decoration: underline;">Back to Home</a>
-                <button onclick="saveConfig()" class="btn btn-save">Save Configuration</button>
-            </div>
-        </header>
+
+        {% call ui::header("Configuration des Points de Chaîne", "Gérer les récompenses de points de chaîne Twitch" , "saveConfig()", "Sauvegarder") %}
 
         <div class="card-list" id="cardList">
             <!-- Les récompenses seront ajoutées dynamiquement -->
@@ -620,44 +565,8 @@
             return div.innerHTML;
         }
 
-        // Connexion WebSocket Twitch pour le statut
-        function connectTwitchWs() {
-            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-            let ws;
-            try {
-                ws = new WebSocket(`${proto}://${location.host}/api/twitch_ws`);
-            } catch (e) {
-                return;
-            }
-
-            ws.addEventListener('message', (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    // `twitch_ws` émet {total_followers, last_follower, connected} :
-                    // il n'y a pas de champ `type`, la pastille ne passait donc
-                    // jamais au vert.
-                    if (typeof data.connected === 'boolean') {
-                        const dot = document.getElementById('statusDot');
-                        const text = document.getElementById('statusText');
-                        if (data.connected) {
-                            dot.className = 'status-dot status-connected';
-                            text.textContent = 'Twitch: Connecté';
-                        } else {
-                            dot.className = 'status-dot status-disconnected';
-                            text.textContent = 'Twitch: Déconnecté';
-                        }
-                    }
-                } catch (e) {}
-            });
-
-            ws.addEventListener('close', () => {
-                setTimeout(connectTwitchWs, 2000);
-            });
-        }
-
         window.addEventListener('load', () => {
             loadConfig();
-            connectTwitchWs();
         });
     </script>
 </body>

@@ -1,8 +1,10 @@
+{% import "partials/_macros.html" as ui -%}
+
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Scheduler</title>
+    <title>Planning hebdomadaire</title>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800;1,900&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     {% if title_font != "" %}
@@ -415,23 +417,17 @@
 </head>
 <body>
     <div class="page-container">
-        <div style="width: 100%; display: flex; justify-content: flex-end; padding: 0 10px; margin-bottom: 20px;">
-            <a href="/" style="color: #7aa2f7; text-decoration: none; font-size: 0.8rem; border: 1px solid rgba(122, 162, 247, 0.3); padding: 5px 10px; border-radius: 5px;">Back Home</a>
-        </div>
+        {% call ui::header("Planning hebdomadaire", "Planifiez votre semaine et exportez-la pour les réseaux sociaux." , "saveSchedule()", "Sauvegarder") %}
+
 
         <header class="page-header">
-            <div>
-                <h1 class="page-title">Streamer Weekly Scheduler</h1>
-                <p class="page-subtitle">Plan your week and export for social media.</p>
-            </div>
 
             <div class="header-actions">
                 <label class="btn btn-secondary">
-                    Change Background
+                    Changer le fond
                     <input type="file" accept="image/*" class="hidden-input" id="backgroundInput" />
                 </label>
-                <button onclick="saveSchedule()" class="btn btn-save">Save Schedule</button>
-                <button onclick="exportAsImage()" class="btn btn-export">Export Image</button>
+                <button onclick="exportAsImage()" class="btn btn-export">Exporter l'image</button>
             </div>
         </header>
 
@@ -441,7 +437,7 @@
             </div>
 
             <div class="preview-panel">
-                <h2 class="preview-title" style="display: none;">Preview</h2>
+                <h2 class="preview-title" style="display: none;">Aperçu</h2>
                 <div id="schedulerRef" class="export-container">
                     <div class="overlay-gradient"></div>
                     <div class="inner-content">
@@ -462,7 +458,11 @@
     </div>
 
     <script>
-        const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        // Les 3 premières lettres servent d'abréviation sur les cartes (LUN, MAR…) :
+        // elles restent distinctes deux à deux en français, comme en anglais.
+        // `loadConfig` régénère ce champ à chaque chargement et n'apparie les données
+        // sauvegardées que par `dayIndex` — renommer ici ne casse aucun scheduler.json.
+        const weekDays = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
         let schedule = [];
         let backgroundImage = null;
 
@@ -526,7 +526,7 @@
                 renderEditor();
                 renderPreview();
             } catch (error) {
-                console.error('Failed to load scheduler config:', error);
+                console.error('Chargement de la configuration du planning impossible :', error);
                 schedule = getWeekDays();
                 renderEditor();
                 renderPreview();
@@ -551,23 +551,23 @@
                         <span class="day-date">${day.date}</span>
                     </div>
                     <div class="input-group">
-                        <label class="control-label">Stream Title</label>
-                        <input type="text" value="${day.title || ''}" placeholder="e.g. Chill Stream & Chat" class="input-field" onchange="updateTitle(${index}, this.value)" />
+                        <label class="control-label">Titre du stream</label>
+                        <input type="text" value="${day.title || ''}" placeholder="ex. Chill Stream & Chat" class="input-field" onchange="updateTitle(${index}, this.value)" />
                     </div>
                     <div class="input-group">
-                        <label class="control-label">Stream Time</label>
-                        <input type="text" value="${day.time || ''}" placeholder="e.g. 20:30" class="input-field" onchange="updateTime(${index}, this.value)" />
+                        <label class="control-label">Heure du stream</label>
+                        <input type="text" value="${day.time || ''}" placeholder="ex. 20h30" class="input-field" onchange="updateTime(${index}, this.value)" />
                     </div>
                     <div class="input-group">
-                        <label class="control-label">Cover Image</label>
+                        <label class="control-label">Image de couverture</label>
                         <div class="file-input-wrapper">
                             <input type="file" accept="image/*" class="file-input" onchange="handleFileUpload(${index}, event)" />
-                            <div class="file-custom-label">${day.coverPath ? 'Image Selected (Change)' : 'Upload Cover'}</div>
+                            <div class="file-custom-label">${day.coverPath ? 'Image choisie (modifier)' : 'Choisir une image'}</div>
                         </div>
                         ${day.coverPath ? `
                         <div style="margin-top: 0.5rem; display: flex; justify-content: flex-end;">
                             <button type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" onclick="clearCover(${index})">
-                                Remove Cover
+                                Retirer l'image
                             </button>
                         </div>
                         ` : ''}
@@ -595,7 +595,7 @@
                         </div>
                         <div class="spacer"></div>
                         <div class="card-title-box">
-                            <p class="card-title-display">${day.title || 'Off'}</p>
+                            <p class="card-title-display">${day.title || 'Repos'}</p>
                         </div>
                     </div>
                 </div>
@@ -631,11 +631,11 @@
                     renderEditor();
                     renderPreview();
                 } else {
-                    alert('Failed to upload image');
+                    alert("Échec de l'envoi de l'image");
                 }
             } catch (error) {
                 console.error('Error uploading image:', error);
-                alert('Error uploading image');
+                alert("Erreur lors de l'envoi de l'image");
             }
         }
 
@@ -657,11 +657,11 @@
                     backgroundImage = data.path;
                     updateBackground();
                 } else {
-                    alert('Failed to upload background image');
+                    alert("Échec de l'envoi de l'image de fond");
                 }
             } catch (error) {
                 console.error('Error uploading background image:', error);
-                alert('Error uploading background image');
+                alert("Erreur lors de l'envoi de l'image de fond");
             }
         });
 
@@ -679,14 +679,14 @@
                 });
 
                 if (response.ok) {
-                    alert('Schedule saved successfully!');
+                    alert('Planning enregistré.');
                 } else {
                     const error = await response.json();
-                    alert('Failed to save schedule: ' + (error.error || 'Unknown error'));
+                    alert("Échec de l'enregistrement : " + (error.error || 'erreur inconnue'));
                 }
             } catch (error) {
                 console.error('Error saving schedule:', error);
-                alert('Failed to save schedule: ' + error);
+                alert("Échec de l'enregistrement : " + error);
             }
         }
 
@@ -723,7 +723,7 @@
                 console.log('Export successful');
             } catch (error) {
                 console.error('Export failed:', error);
-                alert('Failed to export image: ' + error);
+                alert("Échec de l'export de l'image : " + error);
             }
         }
 

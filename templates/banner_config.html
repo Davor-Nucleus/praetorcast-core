@@ -1,3 +1,4 @@
+{% import "partials/_macros.html" as ui -%}
 <!DOCTYPE html>
 <html>
 <head>
@@ -39,24 +40,8 @@
             padding: var(--spacing-xl);
         }
 
-        .page-header {
-            margin-bottom: var(--spacing-xl);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+        {% include "partials/_header.html" %}
 
-        .page-title {
-            font-size: 1.875rem;
-            font-weight: 700;
-            color: var(--accent-glow);
-            margin-bottom: 0.25rem;
-        }
-
-        .page-subtitle {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-        }
 
         .btn {
             padding: var(--spacing-sm) var(--spacing-lg);
@@ -361,16 +346,8 @@
 </head>
 <body>
     <div class="page-container">
-        <header class="page-header">
-            <div>
-                <h1 class="page-title">Banner Configurator</h1>
-                <p class="page-subtitle">Manage your rotating banner cards.</p>
-            </div>
-            <div style="display: flex; gap: 1rem; align-items: center;">
-                <a href="/" style="color: var(--text-muted); text-decoration: underline;">Back to Home</a>
-                <button onclick="saveConfig()" class="btn btn-save">Save Configuration</button>
-            </div>
-        </header>
+        
+        {% call ui::header("Configuration Bannières", "Gérer les bannières rotatives et leurs images" , "saveConfig()", "Sauvegarder") %}
 
         <div class="preview-panel">
             <div class="preview-stage" id="previewStage">
