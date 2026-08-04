@@ -10,3 +10,4 @@ pub mod channel_point_controller;
 pub mod settings_controller;
 pub mod auth_controller;
 pub mod theme_controller;
+pub mod timer_controller;

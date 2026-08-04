@@ -1,0 +1,11 @@
+{
+  "title": "Retour dans",
+  "durationMs": 10000,
+  "remainingMs": 10000,
+  "running": true,
+  "startedAt": 1785715695434,
+  "endText": "C'est reparti !",
+  "hideWhenZero": true,
+  "showProgress": true,
+  "accentColor": ""
+}

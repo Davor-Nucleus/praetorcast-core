@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Compte à rebours</title>
+    <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            /* Fond transparent : la source navigateur OBS se superpose à la scène. */
+            background: var(--pc-bg);
+            overflow: hidden;
+        }
+
+        /* Ciblé par la classe et non par l'id : `#timer` l'emporterait sur `.hide`
+           (spécificité 1,0,0 contre 0,1,0) et le `display: flex` ci-dessous
+           rendrait le masquage de l'overlay inopérant. */
+        .timer {
+            /* Couleur du thème par défaut ; la configuration peut la surcharger. */
+            --accent: var(--pc-accent);
+            font-family: var(--pc-font);
+            color: var(--pc-text);
+            padding: 1.4rem 1.8rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .timer.ready { opacity: 1; }
+
+        .timer-title {
+            font-size: calc(1.9rem * var(--pc-font-scale));
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--pc-text-muted);
+            text-shadow: var(--pc-shadow);
+        }
+
+        .timer-value {
+            font-size: calc(5.5rem * var(--pc-font-scale));
+            font-weight: 700;
+            line-height: 1;
+            color: var(--accent);
+            text-shadow: var(--pc-shadow);
+            /* Chiffres à chasse fixe : sans ça, la largeur saute à chaque seconde. */
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum";
+        }
+
+        /* En pause : la valeur respire lentement, pour qu'un compteur figé ne passe
+           pas pour un compteur cassé. */
+        .timer.paused .timer-value {
+            animation: breathe 2.4s ease-in-out infinite;
+        }
+
+        @keyframes breathe {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.45; }
+        }
+
+        .timer.done .timer-value {
+            font-size: calc(3.6rem * var(--pc-font-scale));
+            color: var(--pc-text);
+        }
+
+        .timer-track {
+            width: 100%;
+            height: 0.5rem;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.55);
+            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+        }
+
+        .timer-fill {
+            height: 100%;
+            width: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg,
+                color-mix(in srgb, var(--accent) 65%, black),
+                var(--accent));
+            box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 70%, transparent);
+            /* Pas de transition : la largeur est réécrite cinq fois par seconde,
+               une interpolation la ferait traîner derrière les chiffres. */
+        }
+
+        /* Utilitaire de masquage : `!important` pour qu'il gagne contre n'importe
+           quelle règle de `display` ajoutée plus tard, sans dépendre de l'ordre des
+           déclarations. Masquer l'overlay est une consigne, pas une suggestion. */
+        .hide { display: none !important; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .timer.paused .timer-value { animation: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="timer" class="timer">
+        <div class="timer-title" id="title"></div>
+        <div class="timer-value" id="value">--:--</div>
+        <div class="timer-track" id="track"><div class="timer-fill" id="fill"></div></div>
+    </div>
+
+    <script>
+        const root  = document.getElementById("timer");
+        const elTitle = document.getElementById("title");
+        const elValue = document.getElementById("value");
+        const elTrack = document.getElementById("track");
+        const elFill  = document.getElementById("fill");
+
+        /** Dernier instantané reçu du serveur. */
+        let state = null;
+        /**
+         * `performance.now()` à la réception de cet instantané.
+         *
+         * L'extrapolation se fait sur cette horloge monotone plutôt que sur
+         * `Date.now()` : elle ne saute pas si l'heure système change, et chaque
+         * message la ré-ancre de toute façon.
+         */
+        let anchor = 0;
+
+        /** Dernière chaîne affichée : on ne touche au DOM que si elle change. */
+        let shown = null;
+
+        function remainingMs() {
+            if (!state) return null;
+            if (!state.running) return state.remainingMs;
+            return Math.max(0, state.remainingMs - (performance.now() - anchor));
+        }
+
+        /**
+         * `Math.ceil` et pas `round` : au démarrage d'un compte à rebours de 5 min on
+         * veut lire « 5:00 », et le passage à « 0:00 » doit coïncider avec la fin.
+         */
+        function format(ms) {
+            const total = Math.ceil(ms / 1000);
+            const s = total % 60;
+            const m = Math.floor(total / 60) % 60;
+            const h = Math.floor(total / 3600);
+            const pad = (n) => String(n).padStart(2, "0");
+            return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+        }
+
+        function render() {
+            if (!state) return;
+
+            const ms   = remainingMs();
+            const done = ms <= 0;
+
+            // Compteur terminé et masquage demandé : l'overlay disparaît en entier
+            // plutôt que d'afficher un 0:00 permanent dans la scène.
+            root.classList.toggle("hide", done && state.hideWhenZero);
+            root.classList.toggle("done", done);
+            root.classList.toggle("paused", !state.running && !done);
+
+            const text = done ? (state.endText || "") : format(ms);
+            if (text !== shown) {
+                elValue.textContent = text;
+                shown = text;
+            }
+
+            // `=== false` et pas `!` : un instantané d'une version antérieure n'a pas
+            // la clé, et la barre doit rester visible dans ce cas.
+            const hidden = done || state.showProgress === false;
+            elTrack.classList.toggle("hide", hidden);
+            if (hidden) return;
+
+            const duration = state.durationMs || 0;
+            const percent = duration > 0 ? Math.max(0, Math.min(100, (ms / duration) * 100)) : 0;
+            elFill.style.width = percent + "%";
+        }
+
+        function apply(payload) {
+            state = payload;
+            anchor = performance.now();
+
+            // Tout passe par textContent et style : aucune interpolation dans du HTML.
+            elTitle.textContent = payload.title || "";
+            elTitle.classList.toggle("hide", !payload.title);
+
+            if (payload.accentColor) {
+                root.style.setProperty("--accent", payload.accentColor);
+            } else {
+                // Sans couleur propre, on retombe sur l'accent du thème plutôt que
+                // sur une valeur codée en dur.
+                root.style.removeProperty("--accent");
+            }
+
+            render();
+            root.classList.add("ready");
+        }
+
+        function connect() {
+            const scheme = location.protocol === "https:" ? "wss" : "ws";
+            const ws = new WebSocket(`${scheme}://${location.host}/api/timer_ws`);
+
+            ws.onmessage = (evt) => {
+                try {
+                    apply(JSON.parse(evt.data));
+                } catch (e) {
+                    console.error("Charge utile illisible:", e);
+                }
+            };
+
+            // Même stratégie de reconnexion que les autres overlays : la source OBS
+            // ne doit jamais avoir besoin d'être rafraîchie à la main.
+            ws.onclose = () => setTimeout(connect, 5000);
+            ws.onerror = () => ws.close();
+        }
+
+        // 200 ms : assez fin pour que la seconde tombe juste, assez lâche pour ne pas
+        // occuper le processeur d'une source navigateur qui n'affiche que du texte.
+        setInterval(render, 200);
+        window.addEventListener("load", connect);
+    </script>
+</body>
+</html>

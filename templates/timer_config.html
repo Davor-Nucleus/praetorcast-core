@@ -1,0 +1,615 @@
+{% import "partials/_macros.html" as ui -%}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Timer Configurator</title>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --bg-card: #1e1e1e;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --border-light: #333333;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #2563eb;
+            --accent-glow: #60a5fa;
+            --danger: #ef4444;
+            --warning: #fbbf24;
+            --success: #22c55e;
+            --spacing-sm: 0.5rem;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
+            --spacing-xl: 2rem;
+            --radius-md: 0.375rem;
+            --radius-lg: 0.5rem;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-glow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: "Instrument Sans", sans-serif;
+        }
+
+        .page-container {
+            min-height: 100vh;
+            padding: var(--spacing-xl);
+            max-width: 60rem;
+            margin: 0 auto;
+        }
+
+        {% include "partials/_header.html" %}
+
+        .btn {
+            padding: var(--spacing-sm) var(--spacing-lg);
+            border-radius: var(--radius-md);
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+        }
+
+        .btn-save {
+            background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin: 0 0 var(--spacing-md);
+            color: var(--accent-glow);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+            gap: var(--spacing-md);
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .control-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .input-field {
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            color: var(--text-main);
+            padding: var(--spacing-sm) var(--spacing-md);
+            font-size: 1rem;
+            font-family: inherit;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: var(--shadow-glow);
+        }
+
+        input[type="color"].input-field {
+            padding: 0.2rem;
+            height: 2.6rem;
+            cursor: pointer;
+        }
+
+        .hint {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .toggles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-lg);
+            margin-top: var(--spacing-md);
+        }
+
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+
+        .toggle input {
+            width: 1.1rem;
+            height: 1.1rem;
+            accent-color: var(--accent-primary);
+            cursor: pointer;
+        }
+
+        /* ── Régie : la partie qu'on regarde en direct ──────────────────────── */
+        .console {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--spacing-lg);
+        }
+
+        .readout {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            min-width: 12rem;
+        }
+
+        .readout-value {
+            font-size: 3.5rem;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--accent-glow);
+            /* Chiffres à chasse fixe : sinon la largeur saute à chaque seconde. */
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum";
+        }
+
+        .readout.running .readout-value { color: var(--success); }
+        .readout.done .readout-value    { color: var(--text-muted); }
+
+        .readout-state {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-sm);
+        }
+
+        .btn-run {
+            background: var(--success);
+            color: #06210f;
+            min-width: 8rem;
+        }
+
+        .btn-run:hover { filter: brightness(1.15); }
+
+        .btn-pause {
+            background: var(--warning);
+            color: #2b1d00;
+            min-width: 8rem;
+        }
+
+        .btn-pause:hover { filter: brightness(1.1); }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--border-light);
+            color: var(--text-muted);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--accent-primary);
+            color: var(--text-main);
+        }
+
+        .adjust-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-sm);
+            margin-top: var(--spacing-lg);
+            padding-top: var(--spacing-lg);
+            border-top: 1px solid var(--border-light);
+        }
+
+        .adjust-row .label {
+            align-self: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-right: var(--spacing-sm);
+        }
+
+        .duration-row {
+            display: flex;
+            align-items: flex-end;
+            gap: var(--spacing-sm);
+        }
+
+        .duration-row .field { width: 6rem; }
+
+        .presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-sm);
+            margin-top: var(--spacing-md);
+        }
+
+        /* ── Accusé de réception ────────────────────────────────────────────
+           Flottant plutôt qu'en bas de page : le bouton « Sauvegarder » est dans
+           le bandeau, et un message hors de l'écran ne prouve rien à personne.
+           Non bloquant aussi — une `alert()` à valider en plein direct, non. */
+        .toast {
+            position: fixed;
+            top: var(--spacing-lg);
+            right: var(--spacing-lg);
+            z-index: 10;
+            max-width: min(24rem, calc(100vw - 2rem));
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-left: 4px solid var(--accent-primary);
+            border-radius: var(--radius-md);
+            padding: 0.75rem var(--spacing-md);
+            font-size: 0.9rem;
+            line-height: 1.4;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+            opacity: 0;
+            transform: translateY(-0.5rem);
+            /* Laisse passer les clics tant qu'il est invisible. */
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: none;
+        }
+
+        .toast.saved {
+            border-left-color: var(--success);
+            color: var(--success);
+        }
+
+        .toast.error {
+            border-left-color: var(--danger);
+            color: var(--danger);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .toast { transition: none; }
+        }
+
+        .url-row {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-top: var(--spacing-md);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .url-row code {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-light);
+            padding: 0.3rem 0.6rem;
+            border-radius: var(--radius-md);
+            color: var(--accent-glow);
+        }
+
+        .hide { display: none; }
+    </style>
+</head>
+<body>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <div class="page-container">
+
+        {% call ui::header("Compte à rebours", "Piloter et régler le compteur affiché dans OBS", "saveConfig()", "Sauvegarder") %}
+
+        <section class="card">
+            <h2 class="card-title">Régie</h2>
+
+            <div class="console">
+                <div class="readout" id="readout">
+                    <span class="readout-value" id="readoutValue">--:--</span>
+                    <span class="readout-state" id="readoutState">Connexion…</span>
+                </div>
+
+                <div class="controls">
+                    <button class="btn btn-run"   id="startBtn" type="button">▶ Démarrer</button>
+                    <button class="btn btn-pause" id="pauseBtn" type="button">⏸ Pause</button>
+                    <button class="btn btn-ghost" id="resetBtn" type="button">↺ Reset</button>
+                </div>
+            </div>
+
+            <div class="adjust-row">
+                <span class="label">Ajuster</span>
+                <button class="btn btn-ghost js-adjust" type="button" data-delta="-300000">−5 min</button>
+                <button class="btn btn-ghost js-adjust" type="button" data-delta="-60000">−1 min</button>
+                <button class="btn btn-ghost js-adjust" type="button" data-delta="-10000">−10 s</button>
+                <button class="btn btn-ghost js-adjust" type="button" data-delta="10000">+10 s</button>
+                <button class="btn btn-ghost js-adjust" type="button" data-delta="60000">+1 min</button>
+                <button class="btn btn-ghost js-adjust" type="button" data-delta="300000">+5 min</button>
+            </div>
+
+            <p class="hint" style="margin-top: 1rem;">
+                Ces boutons agissent tout de suite, sans passer par « Sauvegarder ».
+                <kbd>Espace</kbd> démarre ou met en pause tant qu'aucun champ n'a le focus.
+            </p>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">Réglages</h2>
+
+            <div class="grid">
+                <div class="field">
+                    <label class="control-label" for="title">Titre affiché</label>
+                    <input class="input-field" id="title" type="text" maxlength="60"
+                           placeholder="Retour dans">
+                    <span class="hint">Laisser vide pour n'afficher que les chiffres.</span>
+                </div>
+
+                <div class="field">
+                    <label class="control-label">Durée</label>
+                    <div class="duration-row">
+                        <div class="field">
+                            <input class="input-field" id="minutes" type="number" min="0" max="1440" step="1">
+                            <span class="hint">minutes</span>
+                        </div>
+                        <div class="field">
+                            <input class="input-field" id="seconds" type="number" min="0" max="59" step="1">
+                            <span class="hint">secondes</span>
+                        </div>
+                    </div>
+                    <span class="hint">
+                        Appliquée immédiatement si le compteur est à l'arrêt ; sinon au prochain
+                        « Reset », pour ne pas faire sauter un décompte en direct.
+                    </span>
+                    <div class="presets">
+                        <button class="btn btn-ghost js-preset" type="button" data-minutes="1">1 min</button>
+                        <button class="btn btn-ghost js-preset" type="button" data-minutes="5">5 min</button>
+                        <button class="btn btn-ghost js-preset" type="button" data-minutes="10">10 min</button>
+                        <button class="btn btn-ghost js-preset" type="button" data-minutes="15">15 min</button>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label class="control-label" for="endText">Texte de fin</label>
+                    <input class="input-field" id="endText" type="text" maxlength="60"
+                           placeholder="C'est reparti !">
+                    <span class="hint">Remplace les chiffres une fois à zéro.</span>
+                </div>
+
+                <div class="field">
+                    <label class="control-label" for="accentColor">Couleur d'accent</label>
+                    <input class="input-field" id="accentColor" type="color">
+                    <label class="toggle" style="margin-top: 0.35rem;">
+                        <input type="checkbox" id="useTheme"> Utiliser la couleur du thème
+                    </label>
+                </div>
+            </div>
+
+            <div class="toggles">
+                <label class="toggle">
+                    <input type="checkbox" id="showProgress"> Afficher la barre de progression
+                </label>
+                <label class="toggle">
+                    <input type="checkbox" id="hideWhenZero"> Masquer l'overlay une fois à zéro
+                </label>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">Source OBS</h2>
+            <p class="hint">
+                Ajoute une source navigateur sur cette URL. Les contrôles peuvent rester
+                désactivés : tout se pilote depuis cette page, et un rafraîchissement de la
+                source ne perd pas le décompte.
+            </p>
+            <div class="url-row">
+                <span>Source navigateur OBS :</span>
+                <code id="overlayUrl">/timer</code>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+
+        /** Dernier instantané reçu, et l'horloge monotone qui l'ancre. */
+        let state = null;
+        let anchor = 0;
+
+        function remainingMs() {
+            if (!state) return null;
+            if (!state.running) return state.remainingMs;
+            return Math.max(0, state.remainingMs - (performance.now() - anchor));
+        }
+
+        function format(ms) {
+            const total = Math.ceil(ms / 1000);
+            const s = total % 60;
+            const m = Math.floor(total / 60) % 60;
+            const h = Math.floor(total / 3600);
+            const pad = (n) => String(n).padStart(2, "0");
+            return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+        }
+
+        function renderReadout() {
+            if (!state) return;
+            const ms = remainingMs();
+            const done = ms <= 0;
+
+            $("readoutValue").textContent = format(ms);
+            $("readoutState").textContent = done
+                ? "Terminé"
+                : state.running ? "En marche" : "En pause";
+
+            const readout = $("readout");
+            readout.classList.toggle("running", state.running && !done);
+            readout.classList.toggle("done", done);
+        }
+
+        let toastTimer = null;
+
+        function setStatus(message, kind) {
+            const el = $("toast");
+            clearTimeout(toastTimer);
+
+            if (!message) {
+                el.classList.remove("show");
+                return;
+            }
+
+            el.textContent = message;
+            el.className = "toast show" + (kind ? " " + kind : "");
+            // Une erreur reste plus longtemps : elle demande une action, là où un
+            // accusé de sauvegarde n'a qu'à être vu.
+            toastTimer = setTimeout(() => el.classList.remove("show"), kind === "error" ? 8000 : 3000);
+        }
+
+        /** Les actions ne passent pas par « Sauvegarder » : elles agissent tout de suite. */
+        async function action(path) {
+            try {
+                const response = await fetch("/api/timer/" + path, { method: "POST" });
+                if (!response.ok) throw new Error("HTTP " + response.status);
+                // L'état revient par le WebSocket, commun à cette page et à l'overlay.
+                setStatus("", "");
+            } catch (e) {
+                setStatus("Action impossible : " + e.message, "error");
+            }
+        }
+
+        const adjust = (deltaMs) => action("adjust?deltaMs=" + deltaMs);
+
+        function fillForm(payload) {
+            const total = Math.round((payload.durationMs || 0) / 1000);
+            $("title").value        = payload.title || "";
+            $("minutes").value      = Math.floor(total / 60);
+            $("seconds").value      = total % 60;
+            $("endText").value      = payload.endText || "";
+            $("hideWhenZero").checked = payload.hideWhenZero === true;
+            $("showProgress").checked = payload.showProgress !== false;
+            $("useTheme").checked   = !payload.accentColor;
+            $("accentColor").value  = payload.accentColor || "#3b82f6";
+            $("accentColor").disabled = !payload.accentColor;
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch("/api/timer");
+                if (!response.ok) throw new Error("HTTP " + response.status);
+                fillForm(await response.json());
+            } catch (e) {
+                setStatus("Chargement impossible : " + e.message, "error");
+            }
+        }
+
+        async function saveConfig() {
+            const minutes = Math.max(0, parseInt($("minutes").value, 10) || 0);
+            const seconds = Math.max(0, parseInt($("seconds").value, 10) || 0);
+            const body = {
+                title: $("title").value,
+                durationMs: (minutes * 60 + seconds) * 1000,
+                endText: $("endText").value,
+                hideWhenZero: $("hideWhenZero").checked,
+                showProgress: $("showProgress").checked,
+                // Case cochée : on renvoie une couleur vide, l'overlay retombe alors
+                // sur l'accent du thème global.
+                accentColor: $("useTheme").checked ? "" : $("accentColor").value,
+            };
+
+            try {
+                const response = await fetch("/api/timer", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                });
+                if (!response.ok) throw new Error("HTTP " + response.status);
+                setStatus("Réglages enregistrés — l'overlay se met à jour tout seul.", "saved");
+            } catch (e) {
+                setStatus("Échec de l'enregistrement : " + e.message, "error");
+            }
+        }
+
+        // Le même flux que l'overlay : cette page voit exactement ce qui est à l'antenne.
+        function connect() {
+            const scheme = location.protocol === "https:" ? "wss" : "ws";
+            const ws = new WebSocket(`${scheme}://${location.host}/api/timer_ws`);
+
+            ws.onmessage = (evt) => {
+                let payload;
+                try { payload = JSON.parse(evt.data); } catch { return; }
+                state = payload;
+                anchor = performance.now();
+                renderReadout();
+            };
+
+            ws.onclose = () => {
+                $("readoutState").textContent = "Serveur injoignable";
+                setTimeout(connect, 5000);
+            };
+            ws.onerror = () => ws.close();
+        }
+
+        $("startBtn").addEventListener("click", () => action("start"));
+        $("pauseBtn").addEventListener("click", () => action("pause"));
+        $("resetBtn").addEventListener("click", () => action("reset"));
+
+        for (const btn of document.querySelectorAll(".js-adjust")) {
+            btn.addEventListener("click", () => adjust(btn.dataset.delta));
+        }
+
+        for (const btn of document.querySelectorAll(".js-preset")) {
+            btn.addEventListener("click", () => {
+                $("minutes").value = btn.dataset.minutes;
+                $("seconds").value = 0;
+                saveConfig();
+            });
+        }
+
+        $("useTheme").addEventListener("change", () => {
+            $("accentColor").disabled = $("useTheme").checked;
+        });
+
+        // Barre d'espace = démarrer/pause, sauf en train de saisir un champ — le
+        // raccourci sert justement à ne pas viser un bouton en plein direct.
+        document.addEventListener("keydown", (evt) => {
+            if (evt.code !== "Space") return;
+            const tag = document.activeElement?.tagName;
+            if (tag === "INPUT" || tag === "TEXTAREA" || tag === "BUTTON") return;
+            evt.preventDefault();
+            action("toggle");
+        });
+
+        setInterval(renderReadout, 200);
+
+        window.addEventListener("load", () => {
+            $("overlayUrl").textContent = location.origin + "/timer";
+            loadConfig();
+            connect();
+        });
+    </script>
+</body>
+</html>

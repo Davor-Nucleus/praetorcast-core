@@ -8,7 +8,7 @@ mod controllers;
 mod twitch;
 mod twitch_auth;
 
-use controllers::{auth_controller, banner_controller, channel_point_controller, display, goal_controller, music_controller, obs_controller, scheduler_controller, settings_controller, theme_controller, twitch_controller};
+use controllers::{auth_controller, banner_controller, channel_point_controller, display, goal_controller, music_controller, obs_controller, scheduler_controller, settings_controller, theme_controller, timer_controller, twitch_controller};
 use models::config::load_config;
 
 #[actix_web::main]
@@ -29,12 +29,17 @@ async fn main() -> std::io::Result<()> {
         twitch::run(bg_state, twitch_reload).await;
     });
 
+    // Réveille les afficheurs du compte à rebours dès qu'un bouton est cliqué, au
+    // lieu d'attendre le tour de boucle suivant.
+    let timer_notify = web::Data::new(timer_controller::TimerNotify(Notify::new()));
+
     println!("Serveur en cours d'exécution sur http://127.0.0.1:{}", port);
 
     HttpServer::new(move || {
         App::new()
             .app_data(twitch_data.clone())
             .app_data(reload_data.clone())
+            .app_data(timer_notify.clone())
             // Fichiers statiques
             .service(Files::new("/public", "./public"))
             // Pages d'affichage
@@ -77,6 +82,25 @@ async fn main() -> std::io::Result<()> {
             .route("/api/goal-config", web::get().to(goal_controller::get))
             .route("/api/goal-config", web::post().to(goal_controller::save))
             .route("/api/goal_ws", web::get().to(goal_controller::goal_ws))
+            // Compte à rebours
+            .route("/timer", web::get().to(timer_controller::display))
+            .route("/timer-config", web::get().to(timer_controller::page))
+            .route("/api/timer", web::get().to(timer_controller::get))
+            .route("/api/timer", web::post().to(timer_controller::save))
+            .route("/api/timer_ws", web::get().to(timer_controller::timer_ws))
+            // Actions en GET **et** en POST, comme le limiteur OBS : la page de
+            // contrôle utilise POST, mais la même URL reste déclenchable depuis un
+            // raccourci ou un bouton de Stream Deck qui ne sait faire qu'un GET.
+            .route("/api/timer/start", web::get().to(timer_controller::start))
+            .route("/api/timer/start", web::post().to(timer_controller::start))
+            .route("/api/timer/pause", web::get().to(timer_controller::pause))
+            .route("/api/timer/pause", web::post().to(timer_controller::pause))
+            .route("/api/timer/toggle", web::get().to(timer_controller::toggle))
+            .route("/api/timer/toggle", web::post().to(timer_controller::toggle))
+            .route("/api/timer/reset", web::get().to(timer_controller::reset))
+            .route("/api/timer/reset", web::post().to(timer_controller::reset))
+            .route("/api/timer/adjust", web::get().to(timer_controller::adjust))
+            .route("/api/timer/adjust", web::post().to(timer_controller::adjust))
             // Paramètres (env.json)
             .route("/settings", web::get().to(settings_controller::page))
             .route("/api/settings", web::get().to(settings_controller::get))
