@@ -1,3 +1,16 @@
 {
-  "goals": []
+  "goals": [
+    {
+      "id": "37a497a4-9638-4116-975a-d3cc7803fe12",
+      "source": "followers",
+      "title": "Nouvel objectif",
+      "target": 200,
+      "manualCurrent": 0,
+      "baseline": 0,
+      "accentColor": "#9146FF",
+      "showNumbers": true,
+      "showPercent": true,
+      "visible": true
+    }
+  ]
 }

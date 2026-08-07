@@ -675,7 +675,12 @@
             goals.push(newGoal());
             renderAll();
         });
-        $("saveBtn").addEventListener("click", saveConfig);
+        // Pas d'écouteur sur le bouton « Sauvegarder » : il vient du macro
+        // `ui::header`, qui n'émet qu'un `onclick="saveConfig()"` sans id. Un
+        // `$("saveBtn").addEventListener(...)` levait ici un TypeError qui coupait
+        // l'évaluation du script avant l'enregistrement du `load` ci-dessous — la
+        // page ne chargeait donc jamais la configuration, et enregistrer par-dessus
+        // écrasait goal.json avec une liste vide.
 
         window.addEventListener("load", () => {
             $("overlayUrl").textContent = location.origin + "/goal";

@@ -17,7 +17,8 @@ Ce projet est un serveur web en Rust utilisant **Actix-web** et **Askama** (temp
 - **Overlays OBS prêts à l'emploi** — horloge, bannière tournante, musique en cours, emote corner, présence Discord, infos followers.
 - **Chat multi-plateformes** — chat Twitch (horizontal / vertical) et chat YouTube, avec récupération des badges Twitch.
 - **Channel Points Twitch** — overlay d'alerte + page de configuration des récompenses (image et son personnalisés par récompense).
-- **Bannière configurable** — cartes texte/image avec transition et durée, éditables depuis une page web dédiée.
+- **Bannière configurable** — cartes texte/image **ou objectif**, avec transition et durée, éditables depuis une page web dédiée. Des barres peuvent aussi rester fixées sur un bord pendant que les cartes tournent.
+- **Barres d'objectif** — followers, abonnés ou compteur libre, empilables, avec ligne de base.
 - **Planning hebdomadaire (Scheduler)** — 7 jours éditables (titre, date, horaire, jaquette, image de fond).
 - **Pilotage OBS** — contrôle du filtre Limiter (obs-websocket v5) sur une source audio : activation, seuil en dB, création automatique du filtre.
 - **Musique & soundboard** — page de configuration avec raccourcis clavier et intégration MPD.
@@ -189,10 +190,39 @@ Le module `twitch.rs` se connecte en **WebSocket** à l'EventSub API Twitch (`ws
 - WebSocket temps réel qui reflète aussi les changements faits **directement dans OBS**.
 
 ### 🖼️ Banner
-- Système de cartes avec texte, image, transition et durée d'affichage.
+- Système de cartes avec transition et durée d'affichage, réordonnables.
+- **Deux types de carte**, choisis à l'ajout dans `/banner-config` :
+  - `text` — texte et/ou image, la carte historique ;
+  - `goal` — une barre d'objectif, ou toutes, selon le `goalId` retenu.
+- **Barres fixes** (`dock`) : des objectifs affichés en permanence sur un bord, haut ou
+  bas, pendant que les cartes tournent au-dessus. La hauteur réellement occupée est
+  mesurée et rétrécit la zone des cartes, qui ne passent donc jamais dessous.
 - Normalisation automatique des chemins d'images (`banner/img.png` → `/public/banner/img.png`).
 - Fallback automatique en cas d'erreur de parsing JSON.
 - Upload d'images avec génération d'UUID.
+
+### 🎯 Barres d'objectif
+- Sources `followers` (relevée par EventSub), `subs` (Helix, cache de 60 s) ou `manual`.
+- Plusieurs barres empilables, réordonnables, avec ligne de base (« +50 ce stream »
+  plutôt qu'un total absolu).
+- **Répartition des responsabilités** : `/goal-config` définit les objectifs et rien
+  d'autre ; `/banner-config` décide de ceux que la bannière affiche et à quelle place.
+- `/banner` lit les **valeurs** sur le même flux `/api/goal_ws` que `/goal`, et le
+  **choix** de ce qu'il affiche sur `/api/banner_ws`. Aucun rafraîchissement de source
+  OBS n'est nécessaire après un changement de réglage.
+- Une carte dont la cible a été supprimée est retirée du cycle plutôt que d'imposer une
+  carte vide à chaque tour.
+- Le rendu d'une barre vit dans `templates/partials/_goal_bars.html`, partagé par
+  `/goal`, `/banner` et l'aperçu de `/banner-config` — un partiel Askama et non un asset
+  de `public/`, que la procédure de compilation ne recopie pas vers le dossier
+  d'exécution.
+- **Deux habillages, un seul composant.** La classe `.goal-banner`, posée par `/banner`
+  et par l'aperçu, bascule les barres sur la direction artistique de la bannière :
+  titre et chiffres au dégradé animé (`--pc-gradient`, comme `.banner-text`), tailles en
+  `clamp()` calées sur la largeur de la source, piste au rayon `--pc-radius` au lieu de
+  la pilule. Le remplissage garde l'`accentColor` de l'objectif, pour que deux barres
+  restent distinguables. Sans cette classe — c'est le cas de `/goal` — l'aspect
+  d'incrustation d'origine est conservé.
 
 ### 📅 Scheduler (Planning)
 - Planning hebdomadaire avec 7 jours (index 0–6).
@@ -203,7 +233,9 @@ Le module `twitch.rs` se connecte en **WebSocket** à l'EventSub API Twitch (`ws
 
 ## 🧪 Tests
 
-Des tests unitaires sont intégrés directement dans les fichiers sources (`#[cfg(test)] mod tests`). **Total : 24 tests**
+### Rust — **95 tests**
+
+Intégrés directement dans les fichiers sources (`#[cfg(test)] mod tests`).
 
 ```sh
 # Lancer tous les tests
@@ -217,6 +249,22 @@ cargo test models::config
 
 > [!TIP]
 > Les tests sont isolés du code de production : ils ne sont compilés qu'avec `cargo test`, pas en `cargo build`.
+
+### Overlays et pages de configuration (JavaScript) — **65 assertions**
+
+```sh
+node tests/js/run.cjs
+```
+
+L'essentiel du comportement des overlays vit dans le JavaScript des templates, hors de
+portée de `cargo test` : réutilisation des barres d'un rafraîchissement à l'autre (sans
+quoi la transition CSS repartirait de zéro), empreinte de structure qui empêche la
+rotation de la bannière de redémarrer à chaque follower gagné, résolution d'une carte
+vers son objectif, et échappement — en texte comme en attribut, deux règles distinctes.
+
+Aucune dépendance à installer : `tests/js/dom-stub.cjs` fournit le minimum de DOM
+utilisé par les templates, et chaque suite charge le `<script>` **depuis le fichier
+`.html` servi** — c'est donc bien le code de production qui est éprouvé, pas une copie.
 
 ---
 

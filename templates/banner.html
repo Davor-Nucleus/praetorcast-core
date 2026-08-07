@@ -32,6 +32,10 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            /* Hauteur réellement occupée par les barres d'objectif en mode
+               « barres fixes ». Mesurée par le JS, elle rétrécit la zone des
+               cartes pour qu'aucune ne passe dessous. */
+            --goal-dock-h: 0px;
         }
 
         /* Une carte occupe tout l'écran et centre son contenu. */
@@ -44,6 +48,10 @@
             padding: clamp(1rem, 4vw, 4rem);
             opacity: 0;
         }
+
+        /* Le dock est ancré sur un bord : les cartes s'arrêtent à sa limite. */
+        .banner-overlay.dock-bottom .card-wrapper { bottom: var(--goal-dock-h); }
+        .banner-overlay.dock-top    .card-wrapper { top:    var(--goal-dock-h); }
 
         .card-container {
             display: flex;
@@ -113,6 +121,42 @@
         /* Placeholder transparent émis par le JS quand il n'y a pas d'image. */
         .bg-fill { display: none; }
 
+        /* --- Barres d'objectif (cf. partials/_goal_bars.html) ----------------
+           Deux enveloppes pour le même composant : ancrée sur un bord en mode
+           « barres fixes », ou posée dans une carte en mode « carte dédiée ». */
+        .goal-dock {
+            position: absolute;
+            left: 0;
+            right: 0;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+            padding: clamp(1rem, 2.5vw, 2.5rem) clamp(1.5rem, 4vw, 4rem);
+            font-family: var(--pc-font);
+            color: var(--pc-text);
+            /* Le dock ne doit jamais intercepter un clic dans OBS. */
+            pointer-events: none;
+        }
+
+        .goal-dock.dock-bottom { bottom: 0; }
+        .goal-dock.dock-top    { top: 0; }
+        .goal-dock.hide        { display: none; }
+
+        /* En carte, le dock n'est plus ancré : il occupe la largeur du conteneur
+           et se laisse animer par la transition de la carte qui le porte.
+           Aucune échelle imposée : les `clamp()` de l'habillage bannière sont déjà
+           calibrés pour le plein écran. */
+        .goal-dock-card {
+            position: static;
+            flex: 1 1 100%;
+            gap: 2.4rem;
+            padding: 0;
+            /* Même largeur utile que `.card-container`, pour que les barres
+               s'alignent sur le texte des cartes voisines. */
+            max-width: min(92vw, 1600px);
+        }
+
         /* Dégradé animé sur le texte */
         .gradient-text {
             background: var(--pc-gradient);
@@ -170,16 +214,55 @@
         <div class="empty-state" id="emptyState">
             <p>No banner cards configured or loading...</p>
         </div>
+        <div class="goal-dock goal-banner hide" id="goalDock"></div>
     </div>
+
+    {% include "partials/_goal_bars.html" %}
 
     <script>
         const DEFAULT_DURATION_MS = 6000;
 
+        const overlayEl   = document.getElementById('bannerOverlay');
+        const emptyStateEl = document.getElementById('emptyState');
+        const dockEl      = document.getElementById('goalDock');
+        const dockBars    = createGoalBars(dockEl);
+
+        // `scale: 1` = la taille prévue par l'habillage bannière, qui se calibre
+        // seul sur le viewport ; le réglage ne sert qu'à s'en écarter.
+        const DEFAULT_DOCK = { enabled: false, position: 'bottom', goalId: null, scale: 1 };
+
+        /** Cartes de la rotation (texte/image ou objectif), poussées par /api/banner_ws. */
+        let bannerCards = [];
+        /** Barres fixes, même origine : c'est bien `/banner-config` qui les règle. */
+        let dock = { ...DEFAULT_DOCK };
+        /** Toutes les entrées d'objectif avec leurs valeurs, poussées par /api/goal_ws. */
+        let goalEntries = [];
+
+        /** Rotation effective : les cartes retenues, dans leur ordre. */
         let cards = [];
         let currentIndex = 0;
         let rotationTimer = null;
         let currentCardElement = null;
         let wsDeliveredOnce = false;
+        let lastSignature = null;
+
+        /**
+         * Objectifs visés par une carte ou par les barres fixes.
+         *
+         * `goalId` absent vaut « tous les objectifs ». Un `goalId` qui ne
+         * correspond à rien — l'objectif a été supprimé depuis — renvoie une liste
+         * vide, ce que les appelants traitent comme « rien à afficher » plutôt que
+         * de retomber silencieusement sur tous.
+         */
+        function entriesFor(goalId) {
+            if (!goalId) return goalEntries;
+            return goalEntries.filter((e) => e.config && e.config.id === goalId);
+        }
+
+        function dockScale() {
+            const scale = Number(dock.scale);
+            return Number.isFinite(scale) && scale > 0 ? scale : DEFAULT_DOCK.scale;
+        }
 
         function clearRotation() {
             if (rotationTimer) {
@@ -201,9 +284,46 @@
             }, duration);
         }
 
-        // Applique une nouvelle config (au chargement ou poussée en direct par la WS).
-        function applyConfig(newCards) {
-            cards = Array.isArray(newCards) ? newCards : [];
+        // ── Composition de la rotation ────────────────────────────────────────
+
+        /**
+         * Cartes réellement affichables.
+         *
+         * Une carte d'objectif dont la cible a été supprimée depuis `/goal-config`
+         * est retirée du cycle : mieux vaut l'ignorer qu'imposer une carte vide
+         * pendant six secondes à chaque tour.
+         */
+        function buildRotation() {
+            return bannerCards.filter(
+                (c) => c.kind !== 'goal' || entriesFor(c.goalId).length > 0
+            );
+        }
+
+        /**
+         * Empreinte de tout ce qui impose de **recomposer** la rotation.
+         *
+         * Volontairement aveugle aux valeurs (`current`, `percent`, `warning`) :
+         * /api/goal_ws émet à chaque follower gagné, et reconstruire à ce
+         * moment-là ferait sauter la carte affichée et redémarrer le cycle. Seuls
+         * la structure des cartes, les réglages des barres fixes et la liste des
+         * objectifs existants comptent ici ; les valeurs sont poussées dans les
+         * barres déjà en place.
+         */
+        function rotationSignature() {
+            const cardsPart = bannerCards.map((c) => [
+                c.id || '', c.kind || 'text', c.goalId || '',
+                c.text || '', c.imagePath || '', c.transition || '', c.durationMs || 0,
+            ]);
+            // Les identifiants seuls : c'est ce qui décide quelles cartes et quelles
+            // barres fixes ont encore une cible.
+            const goalsPart = goalEntries.map((e, i) => (e.config && e.config.id) || '#' + i);
+            const dockPart = dock.enabled
+                ? [dock.position || 'bottom', dock.goalId || '', dockScale()]
+                : null;
+            return JSON.stringify([cardsPart, dockPart, goalsPart]);
+        }
+
+        function rebuildRotation() {
             clearRotation();
 
             if (currentCardElement && currentCardElement.parentNode) {
@@ -211,16 +331,83 @@
             }
             currentCardElement = null;
             currentIndex = 0;
+            cards = buildRotation();
 
-            const emptyState = document.getElementById('emptyState');
             if (cards.length > 0) {
-                emptyState.style.display = 'none';
                 displayCard(0);
                 scheduleNext();
-            } else {
-                emptyState.style.display = 'flex';
             }
         }
+
+        // ── Barres d'objectif ─────────────────────────────────────────────────
+
+        function dockEntries() {
+            return dock.enabled ? entriesFor(dock.goalId) : [];
+        }
+
+        /** Les barres fixes ne s'affichent que s'il y a effectivement de quoi les emplir. */
+        function dockVisible() {
+            return dockEntries().length > 0;
+        }
+
+        function updateDock() {
+            const visible = dockVisible();
+            dockEl.classList.toggle('hide', !visible);
+
+            const atTop = dock.position === 'top';
+            dockEl.classList.toggle('dock-top', visible && atTop);
+            dockEl.classList.toggle('dock-bottom', visible && !atTop);
+            overlayEl.classList.toggle('dock-top', visible && atTop);
+            overlayEl.classList.toggle('dock-bottom', visible && !atTop);
+
+            if (visible) {
+                dockEl.style.setProperty('--goal-scale', dockScale());
+                dockBars.render(dockEntries());
+            } else {
+                // Vider plutôt que laisser des barres dans un dock masqué : elles
+                // réapparaîtraient telles quelles, valeurs périmées comprises, si
+                // les barres fixes étaient réactivées.
+                dockBars.render([]);
+            }
+            syncDockHeight();
+        }
+
+        // La hauteur du dock dépend du nombre de barres, de l'échelle et de la
+        // police : la mesurer est plus sûr que de la calculer.
+        function syncDockHeight() {
+            const height = dockVisible() ? dockEl.getBoundingClientRect().height : 0;
+            overlayEl.style.setProperty('--goal-dock-h', height + 'px');
+        }
+
+        if (typeof ResizeObserver === 'function') {
+            new ResizeObserver(syncDockHeight).observe(dockEl);
+        }
+
+        /** Rafraîchit les valeurs de la carte d'objectif, si c'est elle qui est affichée. */
+        function updateCardBars() {
+            if (currentCardElement && currentCardElement.goalBars) {
+                currentCardElement.goalBars.render(entriesFor(currentCardElement.goalCardId));
+            }
+        }
+
+        function updateEmptyState() {
+            const somethingOnScreen = cards.length > 0 || dockVisible();
+            emptyStateEl.style.display = somethingOnScreen ? 'none' : 'flex';
+        }
+
+        /** Point d'entrée unique des deux flux : recompose si besoin, sinon rafraîchit. */
+        function applyAll() {
+            const signature = rotationSignature();
+            if (signature !== lastSignature) {
+                lastSignature = signature;
+                rebuildRotation();
+            }
+            updateDock();
+            updateCardBars();
+            updateEmptyState();
+        }
+
+        // ── Flux temps réel ───────────────────────────────────────────────────
 
         // Connexion WebSocket pour les mises à jour en direct (un « Save » dans le
         // configurateur se reflète sans rafraîchir la source OBS). Repli HTTP si la
@@ -238,7 +425,8 @@
             ws.addEventListener('message', (event) => {
                 wsDeliveredOnce = true;
                 try {
-                    applyConfig(JSON.parse(event.data));
+                    applyBannerConfig(JSON.parse(event.data));
+                    applyAll();
                 } catch (error) {
                     console.error('Banner WS parse error:', error);
                 }
@@ -252,15 +440,53 @@
             });
         }
 
+        /** Normalise la charge utile de `/api/banner-config` (cartes + barres fixes). */
+        function applyBannerConfig(payload) {
+            const source = payload && typeof payload === 'object' ? payload : {};
+            bannerCards = Array.isArray(source.cards) ? source.cards : [];
+            dock = { ...DEFAULT_DOCK, ...(source.dock || {}) };
+        }
+
+        // Le même flux que l'overlay /goal, pour les valeurs des barres. Le choix de
+        // ce que la bannière affiche, lui, vient de /api/banner_ws : /goal-config
+        // définit les objectifs, /banner-config décide de leur place à l'écran.
+        // Ouvert en permanence, pour qu'un changement prenne effet sans toucher à OBS.
+        function connectGoalWs() {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            let ws;
+            try {
+                ws = new WebSocket(`${proto}://${location.host}/api/goal_ws`);
+            } catch (error) {
+                setTimeout(connectGoalWs, 5000);
+                return;
+            }
+
+            ws.addEventListener('message', (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    goalEntries = payload.goals || [];
+                    applyAll();
+                } catch (error) {
+                    console.error('Goal WS parse error:', error);
+                }
+            });
+
+            ws.addEventListener('close', () => setTimeout(connectGoalWs, 5000));
+            ws.addEventListener('error', () => ws.close());
+        }
+
         async function loadConfigFallback() {
             try {
                 const response = await fetch('/api/banner-config');
-                applyConfig(response.ok ? await response.json() : []);
+                applyBannerConfig(response.ok ? await response.json() : null);
             } catch (error) {
                 console.error('Error loading config:', error);
-                applyConfig([]);
+                applyBannerConfig(null);
             }
+            applyAll();
         }
+
+        // ── Rendu d'une carte ─────────────────────────────────────────────────
 
         function getTransitionClasses(type, isIn) {
             const base = type || 'fade';
@@ -273,22 +499,34 @@
             return div.innerHTML;
         }
 
-        function displayCard(index) {
-            if (index < 0 || index >= cards.length) return;
+        /**
+         * Carte d'objectif : bâtie par API DOM, jamais par concaténation.
+         *
+         * Chaque carte reçoit **son propre** jeu de barres. Les partager avec les
+         * barres fixes ou avec la carte précédente les ferait migrer d'un parent à
+         * l'autre, et l'ancienne carte se viderait en plein fondu de sortie.
+         */
+        function buildGoalCard(wrapper, card) {
+            const container = document.createElement('div');
+            container.className = 'card-container';
 
-            const card = cards[index];
-            const overlay = document.getElementById('bannerOverlay');
-            const oldCardElement = currentCardElement;
-            const oldIndex = currentIndex;
-            const transitionType = card.transition || 'fade';
+            const holder = document.createElement('div');
+            holder.className = 'goal-dock goal-dock-card goal-banner';
 
-            // Créer le nouvel élément
-            const newCardWrapper = document.createElement('div');
-            newCardWrapper.className = 'card-wrapper';
+            container.appendChild(holder);
+            wrapper.appendChild(container);
 
+            // Mémorisé sur l'élément : les rafraîchissements de valeur doivent
+            // rejouer la même sélection, sans relire la carte de la rotation.
+            wrapper.goalCardId = card.goalId || null;
+            wrapper.goalBars = createGoalBars(holder);
+            wrapper.goalBars.render(entriesFor(wrapper.goalCardId));
+        }
+
+        function buildTextCard(wrapper, card) {
             const hasImage = card.imagePath && card.imagePath.trim() !== '';
 
-            newCardWrapper.innerHTML = `
+            wrapper.innerHTML = `
                 <div class="card-container">
                     ${hasImage ? `
                         <div class="image-section">
@@ -303,9 +541,28 @@
                     </div>
                 </div>
             `;
+        }
+
+        function displayCard(index) {
+            if (index < 0 || index >= cards.length) return;
+
+            const card = cards[index];
+            const oldCardElement = currentCardElement;
+            const oldIndex = currentIndex;
+            const transitionType = card.transition || 'fade';
+
+            // Créer le nouvel élément
+            const newCardWrapper = document.createElement('div');
+            newCardWrapper.className = 'card-wrapper';
+
+            if (card.kind === 'goal') {
+                buildGoalCard(newCardWrapper, card);
+            } else {
+                buildTextCard(newCardWrapper, card);
+            }
 
             // Ajouter la nouvelle carte au DOM (invisible par défaut)
-            overlay.appendChild(newCardWrapper);
+            overlayEl.appendChild(newCardWrapper);
 
             // Si une carte existe déjà, démarrer les deux animations simultanément
             if (oldCardElement) {
@@ -337,8 +594,11 @@
             currentIndex = index;
         }
 
-        // Ouvre la WS (live update) au chargement de la page.
-        window.addEventListener('load', connectWs);
+        // Ouvre les deux WS (live update) au chargement de la page.
+        window.addEventListener('load', () => {
+            connectWs();
+            connectGoalWs();
+        });
 
         // Cleanup on unload
         window.addEventListener('beforeunload', clearRotation);

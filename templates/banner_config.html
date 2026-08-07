@@ -4,6 +4,11 @@
 <head>
     <meta charset="utf-8">
     <title>Banner Configurator</title>
+    <!-- Thème des overlays : l'aperçu d'une carte d'objectif réutilise le composant
+         de barre, qui ne connaît que les variables `--pc-*`. Sans cette feuille il
+         s'afficherait sans couleur ni police. Aucun conflit avec le style sombre de
+         cette page, qui n'utilise que ses propres variables. -->
+    <link rel="stylesheet" href="/theme.css">
     <style>
         :root {
             --bg-dark: #121212;
@@ -225,6 +230,121 @@
             color: var(--accent-glow);
         }
 
+        /* Deux boutons côte à côte : le type de carte se choisit à l'ajout, pas
+           après coup dans un menu — c'est la question qu'on se pose à ce moment-là. */
+        .add-row {
+            display: flex;
+            gap: var(--spacing-md);
+        }
+
+        /* --- Carte d'objectif -------------------------------------------------
+           Remplace la vignette d'image : une carte d'objectif n'a rien à téléverser. */
+        .goal-badge {
+            width: 8rem;
+            height: 8rem;
+            flex-shrink: 0;
+            background-color: var(--bg-dark);
+            border: 1px dashed var(--accent-primary);
+            border-radius: var(--radius-md);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            color: var(--accent-glow);
+            text-align: center;
+            padding: 0.5rem;
+        }
+
+        .goal-badge-icon { font-size: 1.5rem; line-height: 1; }
+
+        .goal-badge-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .goal-badge-target {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            overflow-wrap: anywhere;
+        }
+
+        /* --- Barres fixes ----------------------------------------------------- */
+        .dock-panel {
+            max-width: 56rem;
+            margin: 0 auto var(--spacing-lg);
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+        }
+
+        .panel-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--accent-glow);
+            margin: 0 0 0.35rem;
+        }
+
+        .panel-hint {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin: 0 0 var(--spacing-md);
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-bottom: var(--spacing-md);
+        }
+
+        .toggle-row input {
+            width: 1.05rem;
+            height: 1.05rem;
+            accent-color: var(--accent-primary);
+            cursor: pointer;
+        }
+
+        .dock-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+            gap: var(--spacing-md);
+        }
+
+        .section-title {
+            max-width: 56rem;
+            margin: 0 auto var(--spacing-sm);
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--accent-glow);
+        }
+
+        .hide { display: none; }
+
+        /* Conteneur des barres dans l'aperçu.
+           L'habillage bannière dimensionne en `clamp(…vw…)`, calibré pour une
+           source OBS plein écran : appliqué tel quel dans une scène de 200 px de
+           haut, il déborderait. Les trois tailles sont donc reprises en absolu.
+           Tout le reste — dégradé animé, rayons, couleurs — vient du composant
+           partagé, donc l'aperçu ne peut pas diverger de l'affichage réel. */
+        .preview-goals {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            width: 88%;
+            font-family: var(--pc-font);
+            color: var(--pc-text);
+            --goal-title-size: 1.4rem;
+            --goal-num-size: 1.15rem;
+            --goal-track-h: 0.85rem;
+        }
+
         /* --- Aperçu en direct d'une carte (reproduit le rendu de l'overlay) --- */
         .preview-panel {
             max-width: 56rem;
@@ -355,26 +475,165 @@
             </div>
         </div>
 
+        <section class="dock-panel">
+            <h2 class="panel-title">Barres fixes</h2>
+            <p class="panel-hint">
+                Affiche des objectifs <strong>en permanence</strong> sur un bord, pendant que
+                les cartes tournent au-dessus. Les cartes s'arrêtent à la limite des barres.
+                Pour des objectifs qui prennent leur tour dans la rotation, ajoutez plutôt
+                une carte « objectif » ci-dessous.
+            </p>
+
+            <label class="toggle-row">
+                <input type="checkbox" id="dockEnabled">
+                Afficher des objectifs en permanence
+            </label>
+
+            <div class="dock-grid" id="dockFields">
+                <div class="control-group">
+                    <label class="control-label" for="dockGoal">Objectif affiché</label>
+                    <select id="dockGoal" class="input-field select-field"></select>
+                </div>
+                <div class="control-group">
+                    <label class="control-label" for="dockPosition">Bord occupé</label>
+                    <select id="dockPosition" class="input-field select-field">
+                        <option value="bottom">Bas</option>
+                        <option value="top">Haut</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label class="control-label" for="dockScale">Échelle des barres</label>
+                    <input type="number" id="dockScale" class="input-field" min="0.5" max="4" step="0.1">
+                </div>
+            </div>
+        </section>
+
+        <h2 class="section-title">Cartes en rotation</h2>
+
         <div class="card-list" id="cardList">
             <!-- Les cartes seront ajoutées dynamiquement -->
         </div>
     </div>
 
+    {% include "partials/_goal_bars.html" %}
+
     <script>
+        // `scale: 1` = la taille prévue par l'habillage bannière, qui se calibre
+        // seul sur le viewport ; le réglage ne sert qu'à s'en écarter.
+        const DEFAULT_DOCK = { enabled: false, position: 'bottom', goalId: null, scale: 1 };
+        const ALL_GOALS = '';   // valeur du choix « Tous les objectifs »
+
         let bannerCards = [];
+        let dock = { ...DEFAULT_DOCK };
+
+        /** Objectifs définis dans /goal-config, pour alimenter les listes déroulantes. */
+        let goals = [];
+        /** Mêmes objectifs, valeurs comprises — sert à l'aperçu d'une carte d'objectif. */
+        let goalEntries = [];
 
         async function loadConfig() {
             try {
                 const response = await fetch('/api/banner-config');
                 if (response.ok) {
-                    bannerCards = await response.json();
-                    renderCards();
+                    const config = await response.json();
+                    bannerCards = Array.isArray(config.cards) ? config.cards : [];
+                    dock = { ...DEFAULT_DOCK, ...(config.dock || {}) };
+                    renderAll();
                 } else {
                     console.error('Failed to load config');
                 }
             } catch (error) {
                 console.error('Error loading config:', error);
             }
+        }
+
+        /**
+         * Liste des objectifs disponibles.
+         *
+         * Chargée séparément : `/goal-config` reste la seule page qui les définit,
+         * celle-ci se contente de désigner ceux que la bannière affiche.
+         */
+        async function loadGoals() {
+            try {
+                const response = await fetch('/api/goal-config');
+                if (!response.ok) return;
+                goals = await response.json();
+                renderAll();
+            } catch (error) {
+                console.error('Error loading goals:', error);
+            }
+        }
+
+        function goalTitle(goalId) {
+            const goal = goals.find((g) => g.id === goalId);
+            return goal ? goal.title : null;
+        }
+
+        function renderAll() {
+            renderDockPanel();
+            renderCards();
+        }
+
+        /** Options de la liste déroulante d'objectifs, sélection courante appliquée. */
+        function goalOptions(selectedId) {
+            const selected = (value) => (value === (selectedId || ALL_GOALS) ? ' selected' : '');
+            const options = [
+                `<option value=""${selected(ALL_GOALS)}>Tous les objectifs</option>`,
+            ];
+            for (const goal of goals) {
+                if (!goal.id) continue;
+                options.push(
+                    `<option value="${escapeAttr(goal.id)}"${selected(goal.id)}>${escapeHtml(goal.title || 'Sans titre')}</option>`
+                );
+            }
+            return options.join('');
+        }
+
+        /** Colonne de gauche : vignette d'image, ou pastille pour une carte d'objectif. */
+        function cardThumbnail(card, index) {
+            if (card.kind === 'goal') {
+                const target = card.goalId
+                    ? (goalTitle(card.goalId) || 'Objectif supprimé')
+                    : 'Tous les objectifs';
+                return `
+                    <div class="goal-badge">
+                        <span class="goal-badge-icon">▰</span>
+                        <span class="goal-badge-label">Objectif</span>
+                        <span class="goal-badge-target">${escapeHtml(target)}</span>
+                    </div>
+                `;
+            }
+            return `
+                <div class="image-upload-container">
+                    ${card.imagePath ? `<img src="${escapeAttr(card.imagePath)}" alt="Card Preview" class="preview-image" />` : '<div class="no-image-placeholder">No Image</div>'}
+                    <div class="upload-overlay">
+                        <label class="upload-label">
+                            Change
+                            <input type="file" accept="image/*" class="hidden-input" onchange="handleImageUpload(${index}, event)" />
+                        </label>
+                    </div>
+                </div>
+            `;
+        }
+
+        /** Champ propre au type : le texte pour une carte texte, la cible pour un objectif. */
+        function cardMainField(card, index) {
+            if (card.kind === 'goal') {
+                return `
+                    <div class="control-group">
+                        <label for="goal-${index}" class="control-label">Objectif affiché</label>
+                        <select id="goal-${index}" class="input-field select-field" onchange="updateCardGoal(${index}, this.value)">
+                            ${goalOptions(card.goalId)}
+                        </select>
+                    </div>
+                `;
+            }
+            return `
+                <div class="control-group">
+                    <label for="text-${index}" class="control-label">Text Content</label>
+                    <input id="text-${index}" type="text" value="${escapeAttr(card.text || '')}" placeholder="Enter text..." class="input-field" onchange="updateCardText(${index}, this.value)" />
+                </div>
+            `;
         }
 
         function renderCards() {
@@ -385,20 +644,9 @@
                 const cardItem = document.createElement('div');
                 cardItem.className = 'card-item';
                 cardItem.innerHTML = `
-                    <div class="image-upload-container">
-                        ${card.imagePath ? `<img src="${card.imagePath}" alt="Card Preview" class="preview-image" />` : '<div class="no-image-placeholder">No Image</div>'}
-                        <div class="upload-overlay">
-                            <label class="upload-label">
-                                Change
-                                <input type="file" accept="image/*" class="hidden-input" onchange="handleImageUpload(${index}, event)" />
-                            </label>
-                        </div>
-                    </div>
+                    ${cardThumbnail(card, index)}
                     <div class="controls-container">
-                        <div class="control-group">
-                            <label for="text-${index}" class="control-label">Text Content</label>
-                            <input id="text-${index}" type="text" value="${card.text || ''}" placeholder="Enter text..." class="input-field" onchange="updateCardText(${index}, this.value)" />
-                        </div>
+                        ${cardMainField(card, index)}
                         <div class="control-group">
                             <label for="transition-${index}" class="control-label">Transition Effect</label>
                             <select id="transition-${index}" class="input-field select-field" onchange="updateCardTransition(${index}, this.value)">
@@ -423,22 +671,70 @@
                 cardList.appendChild(cardItem);
             });
 
-            const addButton = document.createElement('button');
-            addButton.className = 'btn-add-card';
-            addButton.textContent = '+ Add New Card';
-            addButton.onclick = addCard;
-            cardList.appendChild(addButton);
+            // Le type de carte se choisit à l'ajout : c'est la question qu'on se pose
+            // à ce moment-là, plutôt qu'un sélecteur à trouver après coup.
+            const addRow = document.createElement('div');
+            addRow.className = 'add-row';
+            addRow.appendChild(addButton('+ Carte texte / image', 'text'));
+            addRow.appendChild(addButton('+ Carte objectif', 'goal'));
+            cardList.appendChild(addRow);
         }
 
-        function addCard() {
+        function addButton(label, kind) {
+            const button = document.createElement('button');
+            button.className = 'btn-add-card';
+            button.textContent = label;
+            button.onclick = () => addCard(kind);
+            return button;
+        }
+
+        function addCard(kind) {
             bannerCards.push({
                 id: null,
+                kind: kind === 'goal' ? 'goal' : 'text',
                 text: '',
                 imagePath: '',
                 transition: 'fade',
-                order: bannerCards.length
+                order: bannerCards.length,
+                // Absent = tous les objectifs, le choix le plus utile par défaut.
+                goalId: null,
             });
             renderCards();
+        }
+
+        function updateCardGoal(index, value) {
+            bannerCards[index].goalId = value === ALL_GOALS ? null : value;
+            renderCards();
+            refreshPreviewIfActive(index);
+        }
+
+        // ── Barres fixes ──────────────────────────────────────────────────────
+
+        function renderDockPanel() {
+            const enabled = document.getElementById('dockEnabled');
+            const goalSelect = document.getElementById('dockGoal');
+
+            enabled.checked = !!dock.enabled;
+            goalSelect.innerHTML = goalOptions(dock.goalId);
+            document.getElementById('dockPosition').value = dock.position || 'bottom';
+            document.getElementById('dockScale').value = dock.scale;
+            document.getElementById('dockFields').classList.toggle('hide', !dock.enabled);
+        }
+
+        function bindDockPanel() {
+            const bind = (id, event, apply) =>
+                document.getElementById(id).addEventListener(event, (e) => {
+                    apply(e.target);
+                    renderDockPanel();
+                });
+
+            bind('dockEnabled',  'change', (t) => { dock.enabled = t.checked; });
+            bind('dockPosition', 'change', (t) => { dock.position = t.value; });
+            bind('dockGoal',     'change', (t) => { dock.goalId = t.value === ALL_GOALS ? null : t.value; });
+            bind('dockScale',    'change', (t) => {
+                const value = Number(t.value);
+                dock.scale = Number.isFinite(value) && value > 0 ? value : DEFAULT_DOCK.scale;
+            });
         }
 
         function removeCard(index) {
@@ -475,6 +771,19 @@
 
         let currentPreviewIndex = null;
 
+        /**
+         * Barres de l'aperçu en cours, quand la carte prévisualisée est un objectif.
+         *
+         * Gardées de côté pour que l'arrivée de nouvelles valeurs les rafraîchisse
+         * en place, au lieu de reconstruire l'aperçu et de relancer son animation
+         * d'entrée toutes les quelques secondes.
+         */
+        let previewGoalBars = null;
+        let previewGoalId = null;
+
+        /** Dernière liste d'objectifs connue, pour ne redessiner que sur changement. */
+        let lastGoalSignature = null;
+
         function updateCardText(index, value) {
             bannerCards[index].text = value;
             refreshPreviewIfActive(index);
@@ -491,20 +800,34 @@
             bannerCards[index].durationMs = (isNaN(seconds) || seconds <= 0) ? undefined : Math.round(seconds * 1000);
         }
 
+        /** Objectifs visés par une carte ou par les barres fixes — même règle que l'overlay. */
+        function entriesFor(goalId) {
+            if (!goalId) return goalEntries;
+            return goalEntries.filter((e) => e.config && e.config.id === goalId);
+        }
+
         // Rejoue l'animation de la carte dans le panneau d'aperçu (reproduit l'overlay).
         function previewCard(index) {
             currentPreviewIndex = index;
             const card = bannerCards[index];
             const stage = document.getElementById('previewStage');
-            const hasImage = card.imagePath && card.imagePath.trim() !== '';
             const transition = card.transition || 'fade';
 
+            if (card.kind === 'goal') {
+                previewGoalCard(stage, card, transition);
+                return;
+            }
+
+            // Aperçu texte : plus aucune barre à rafraîchir en arrière-plan.
+            previewGoalBars = null;
+
+            const hasImage = card.imagePath && card.imagePath.trim() !== '';
             stage.innerHTML = `
                 <div class="card-wrapper ${transition}-in">
                     <div class="card-container">
                         ${hasImage ? `
                             <div class="image-section">
-                                <img src="${card.imagePath}" alt="Banner" class="banner-image-preview" />
+                                <img src="${escapeAttr(card.imagePath)}" alt="Banner" class="banner-image-preview" />
                             </div>
                         ` : ''}
                         <div class="text-section">
@@ -517,16 +840,68 @@
             `;
         }
 
+        /**
+         * Aperçu d'une carte d'objectif, avec les **vraies** valeurs du flux.
+         *
+         * Le rendu passe par `createGoalBars` (partials/_goal_bars.html), le même
+         * composant que l'overlay : l'aperçu ne peut pas diverger de l'affichage.
+         */
+        function previewGoalCard(stage, card, transition) {
+            stage.replaceChildren();
+            previewGoalBars = null;
+            previewGoalId = card.goalId || null;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = `card-wrapper ${transition}-in`;
+
+            const holder = document.createElement('div');
+            holder.className = 'preview-goals goal-banner';
+            wrapper.appendChild(holder);
+            stage.appendChild(wrapper);
+
+            const entries = entriesFor(previewGoalId);
+            if (entries.length === 0) {
+                const empty = document.createElement('span');
+                empty.className = 'preview-hint';
+                empty.textContent = previewGoalId
+                    ? "Cet objectif n'existe plus — la carte sera ignorée dans la rotation."
+                    : 'Aucun objectif défini. Créez-en un dans /goal-config.';
+                holder.appendChild(empty);
+                return;
+            }
+
+            previewGoalBars = createGoalBars(holder);
+            previewGoalBars.render(entries);
+        }
+
         function refreshPreviewIfActive(index) {
             if (index === currentPreviewIndex && bannerCards[index]) {
                 previewCard(index);
             }
         }
 
+        /** Échappe pour un **nœud texte**. Ne convient pas à une valeur d'attribut. */
         function escapeHtml(value) {
             const div = document.createElement('div');
             div.textContent = value;
             return div.innerHTML;
+        }
+
+        /**
+         * Échappe pour une **valeur d'attribut**.
+         *
+         * `escapeHtml` passe par `textContent` → `innerHTML`, qui laisse les
+         * guillemets intacts : un titre de carte contenant `"` sortait de son
+         * `value="…"` et disloquait la ligne. Les données sont locales, donc c'est
+         * de l'auto-injection, mais la page cassait pour de bon.
+         */
+        function escapeAttr(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
         }
 
         function moveUp(index) {
@@ -554,7 +929,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(bannerCards)
+                    body: JSON.stringify({ cards: bannerCards, dock })
                 });
 
                 if (response.ok) {
@@ -570,8 +945,54 @@
             }
         }
 
-        // Load config on page load
-        window.addEventListener('load', loadConfig);
+        /**
+         * Valeurs des objectifs, pour que l'aperçu d'une carte montre l'avancement
+         * réel plutôt qu'une barre factice. Même flux que les overlays.
+         */
+        function connectGoalWs() {
+            const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+            let ws;
+            try {
+                ws = new WebSocket(`${scheme}://${location.host}/api/goal_ws`);
+            } catch (error) {
+                setTimeout(connectGoalWs, 5000);
+                return;
+            }
+
+            ws.onmessage = (evt) => {
+                try {
+                    goalEntries = (JSON.parse(evt.data).goals) || [];
+                } catch (error) {
+                    return;
+                }
+                goals = goalEntries.map((e) => e.config).filter(Boolean);
+
+                // Ne reconstruire les listes déroulantes que si la liste des
+                // objectifs a bougé. Le flux émet aussi à chaque follower gagné :
+                // redessiner à ce moment-là viderait le champ texte en cours de
+                // saisie et rejouerait l'animation de l'aperçu.
+                const signature = goals.map((g) => `${g.id}:${g.title}`).join('|');
+                if (signature !== lastGoalSignature) {
+                    lastGoalSignature = signature;
+                    renderAll();
+                }
+
+                // Les valeurs, elles, sont poussées dans les barres déjà en place.
+                if (previewGoalBars) {
+                    previewGoalBars.render(entriesFor(previewGoalId));
+                }
+            };
+
+            ws.onclose = () => setTimeout(connectGoalWs, 5000);
+            ws.onerror = () => ws.close();
+        }
+
+        window.addEventListener('load', () => {
+            bindDockPanel();
+            loadConfig();
+            loadGoals();
+            connectGoalWs();
+        });
     </script>
 </body>
 </html>

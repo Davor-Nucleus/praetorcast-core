@@ -15,6 +15,8 @@
             overflow: hidden;
         }
 
+        /* Le rendu d'une barre vient de partials/_goal_bars.html ; il ne reste ici
+           que la géométrie du conteneur, propre à cet overlay. */
         #goals {
             font-family: var(--pc-font);
             color: var(--pc-text);
@@ -30,244 +32,24 @@
         #goals.ready {
             opacity: 1;
         }
-
-        .goal {
-            /* Couleur du thème par défaut ; une barre peut la surcharger depuis sa
-               propre configuration (`accentColor`). */
-            --accent: var(--pc-accent);
-        }
-
-        .goal-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            gap: 1rem;
-            margin-bottom: 0.6rem;
-        }
-
-        .goal-title {
-            font-size: calc(2.1rem * var(--pc-font-scale));
-            font-weight: 700;
-            letter-spacing: 0.02em;
-            text-shadow: var(--pc-shadow);
-        }
-
-        .goal-numbers {
-            font-size: calc(1.7rem * var(--pc-font-scale));
-            font-weight: 700;
-            white-space: nowrap;
-            text-shadow: var(--pc-shadow);
-        }
-
-        .goal-current {
-            color: var(--accent);
-        }
-
-        .goal-separator,
-        .goal-target {
-            opacity: 0.75;
-        }
-
-        .goal-track {
-            position: relative;
-            height: 1.6rem;
-            border-radius: 999px;
-            background: rgba(0, 0, 0, 0.55);
-            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
-            overflow: hidden;
-        }
-
-        .goal-fill {
-            height: 100%;
-            width: 0%;
-            border-radius: 999px;
-            background: linear-gradient(90deg,
-                color-mix(in srgb, var(--accent) 65%, black),
-                var(--accent));
-            box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 70%, transparent);
-            /* La largeur est la seule chose animée : une transition sur `width`
-               reste fluide même à 60 fps dans une source navigateur. */
-            transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-
-        /* Reflet qui balaie la barre — s'arrête quand l'objectif est atteint pour
-           laisser la place à l'animation de complétion. */
-        .goal-fill::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(100deg,
-                transparent 30%,
-                rgba(255, 255, 255, 0.28) 50%,
-                transparent 70%);
-            transform: translateX(-100%);
-            animation: sweep 2.6s ease-in-out infinite;
-        }
-
-        .goal.complete .goal-fill::after {
-            animation: none;
-        }
-
-        .goal.complete .goal-fill {
-            animation: pulse 1.8s ease-in-out infinite;
-        }
-
-        @keyframes sweep {
-            to { transform: translateX(100%); }
-        }
-
-        @keyframes pulse {
-            0%, 100% { filter: brightness(1); }
-            50%      { filter: brightness(1.35); }
-        }
-
-        .goal-percent {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.95rem;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
-        }
-
-        .goal-warning {
-            margin-top: 0.5rem;
-            font-size: 0.95rem;
-            color: #fbbf24;
-            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85);
-        }
-
-        .hide {
-            display: none;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            .goal-fill,
-            .goal-fill::after,
-            .goal.complete .goal-fill {
-                transition: none;
-                animation: none;
-            }
-        }
     </style>
 </head>
 <body>
     <div id="goals"></div>
 
-    <template id="goalTpl">
-        <div class="goal">
-            <div class="goal-head">
-                <span class="goal-title"></span>
-                <span class="goal-numbers">
-                    <span class="goal-current">–</span><span
-                        class="goal-separator"> / </span><span class="goal-target"></span>
-                </span>
-            </div>
-            <div class="goal-track">
-                <div class="goal-fill"></div>
-                <div class="goal-percent"></div>
-            </div>
-            <div class="goal-warning hide"></div>
-        </div>
-    </template>
+    {% include "partials/_goal_bars.html" %}
 
     <script>
         const root = document.getElementById("goals");
-        const tpl  = document.getElementById("goalTpl");
-
-        // Une barre déjà à l'écran est réutilisée d'une trame à l'autre : la
-        // reconstruire relancerait la transition `width` depuis 0 à chaque tour.
-        const bars = new Map();
-
-        function barKey(entry, index) {
-            return entry.config.id || `#${index}`;
-        }
-
-        function acquire(key) {
-            let bar = bars.get(key);
-            if (!bar) {
-                bar = tpl.content.firstElementChild.cloneNode(true);
-                bar.el = {
-                    title:   bar.querySelector(".goal-title"),
-                    nums:    bar.querySelector(".goal-numbers"),
-                    current: bar.querySelector(".goal-current"),
-                    target:  bar.querySelector(".goal-target"),
-                    fill:    bar.querySelector(".goal-fill"),
-                    percent: bar.querySelector(".goal-percent"),
-                    warning: bar.querySelector(".goal-warning"),
-                };
-                bars.set(key, bar);
-            }
-            return bar;
-        }
-
-        // Tout passe par textContent / style : aucune interpolation dans du HTML.
-        // `title` vient du configurateur, mais l'avertissement, lui, peut contenir
-        // un message d'erreur de l'API Twitch.
-        function renderBar(bar, entry) {
-            const cfg     = entry.config || {};
-            const current = entry.current;
-            const percent = entry.percent;
-            const el      = bar.el;
-
-            // Sans couleur propre, la barre retombe sur l'accent du thème plutôt
-            // que sur une valeur codée en dur : retirer la surcharge suffit.
-            if (cfg.accentColor) {
-                bar.style.setProperty("--accent", cfg.accentColor);
-            } else {
-                bar.style.removeProperty("--accent");
-            }
-
-            el.title.textContent   = cfg.title || "";
-            el.target.textContent  = cfg.target ?? 0;
-            el.current.textContent = current ?? "–";
-            el.nums.classList.toggle("hide", cfg.showNumbers === false);
-
-            const pct = typeof percent === "number" ? percent : 0;
-            el.fill.style.width = pct + "%";
-            bar.classList.toggle("complete", pct >= 100);
-
-            if (cfg.showPercent === false || typeof percent !== "number") {
-                el.percent.classList.add("hide");
-            } else {
-                el.percent.classList.remove("hide");
-                el.percent.textContent = pct.toFixed(pct < 10 ? 1 : 0) + " %";
-            }
-
-            if (entry.warning) {
-                el.warning.textContent = entry.warning;
-                el.warning.classList.remove("hide");
-            } else {
-                el.warning.classList.add("hide");
-            }
-        }
+        const goalBars = createGoalBars(root);
 
         function render(payload) {
             const entries = (payload.goals || [])
                 // `visible: false` retire la barre sans qu'on touche à OBS.
+                // `showInBanner` ne joue pas ici : c'est l'axe de /banner.
                 .filter((e) => e.config && e.config.visible !== false);
 
-            const seen = new Set();
-            // L'ordre du tableau fait foi : on réinsère à la suite, ce qui
-            // repositionne les barres existantes sans les recréer.
-            for (const [i, entry] of entries.entries()) {
-                const key = barKey(entry, i);
-                seen.add(key);
-                const bar = acquire(key);
-                renderBar(bar, entry);
-                root.appendChild(bar);
-            }
-
-            for (const [key, bar] of bars) {
-                if (!seen.has(key)) {
-                    bar.remove();
-                    bars.delete(key);
-                }
-            }
-
+            goalBars.render(entries);
             root.classList.add("ready");
         }
 

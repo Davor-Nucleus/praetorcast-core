@@ -5,7 +5,7 @@ use askama::Template;
 use futures_util::StreamExt;
 use tokio::time::{sleep, Duration};
 use crate::controllers::upload::{save_upload, IMAGE_EXTENSIONS};
-use crate::models::banner::{self, BannerCard};
+use crate::models::banner::{self, BannerConfig};
 
 #[derive(Template)]
 #[template(path = "banner_config.html")]
@@ -18,10 +18,10 @@ pub async fn page() -> impl Responder {
 
 pub async fn get() -> impl Responder {
     match banner::read() {
-        Ok(cards) => HttpResponse::Ok().json(cards),
+        Ok(config) => HttpResponse::Ok().json(config),
         Err(e) => {
             eprintln!("{}", e);
-            HttpResponse::Ok().json(vec![] as Vec<BannerCard>)
+            HttpResponse::Ok().json(BannerConfig::default())
         }
     }
 }
@@ -35,13 +35,13 @@ pub async fn banner_ws(req: HttpRequest, body: web::Payload) -> actix_web::Resul
 
     // `MessageStream` n'est pas `Send` : on spawne sur le runtime local d'actix.
     actix_web::rt::spawn(async move {
-        // En cas d'erreur de lecture, on pousse une liste vide (l'overlay affiche
-        // alors son « empty state ») plutôt que de couper le flux.
+        // En cas d'erreur de lecture, on pousse une configuration vide (l'overlay
+        // affiche alors son « empty state ») plutôt que de couper le flux.
         let read_snapshot = || {
             banner::read()
                 .ok()
-                .and_then(|cards| serde_json::to_string(&cards).ok())
-                .unwrap_or_else(|| "[]".to_string())
+                .and_then(|config| serde_json::to_string(&config).ok())
+                .unwrap_or_else(|| r#"{"cards":[],"dock":{"enabled":false}}"#.to_string())
         };
 
         // Premier envoi immédiat : la boucle ci-dessous n'émet qu'au bout d'une
@@ -85,8 +85,8 @@ pub async fn banner_ws(req: HttpRequest, body: web::Payload) -> actix_web::Resul
     Ok(response)
 }
 
-pub async fn save(cards: web::Json<Vec<BannerCard>>) -> impl Responder {
-    match banner::write(cards.into_inner()) {
+pub async fn save(config: web::Json<BannerConfig>) -> impl Responder {
+    match banner::write(&config.into_inner()) {
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
         Err(e) => {
             eprintln!("{}", e);
