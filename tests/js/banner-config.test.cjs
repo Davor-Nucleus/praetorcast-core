@@ -321,6 +321,17 @@ await check('l’aperçu d’une carte objectif rend de vraies barres', () => {
   assert.strictEqual(holder.querySelector('.goal-current').textContent, '100');
 });
 
+await check('les tailles de l’aperçu sont assez spécifiques pour s’appliquer', () => {
+  // Le partiel est inclus après le <style> de la page : sur `.preview-goals` seul,
+  // à spécificité égale, ce sont les clamp(vw) de l'habillage plein écran qui
+  // gagnent — l'aperçu déborde alors de sa scène de 200 px sans rien signaler.
+  const html = fs.readFileSync(`${TPL_DIR}/banner_config.html`, 'utf8');
+  const rule = /\.preview-goals(\.goal-banner)?\s*\{([^}]*)\}/.exec(html);
+  assert.ok(rule, 'règle .preview-goals introuvable');
+  assert.ok(rule[1], 'les tailles de l’aperçu tiennent sur une seule classe');
+  assert.ok(/--goal-title-size/.test(rule[2]), rule[2]);
+});
+
 await check('l’aperçu explique une cible disparue au lieu d’afficher du vide', () => {
   const { api, ids } = mountConfig();
   api.setGoals([]);

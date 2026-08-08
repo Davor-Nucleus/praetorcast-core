@@ -356,6 +356,32 @@ check('l’overlay /goal n’hérite pas de l’habillage bannière', () => {
     'le dégradé fuit sur la règle de base de .goal-title');
 });
 
+check('la carte d’objectif est ancrée à gauche, plus étroite que la scène', () => {
+  // Géométrie purement CSS : le stub ne calcule aucune cascade, c'est donc la
+  // déclaration servie qu'on vérifie. Bord à bord, la barre ne se composait pas
+  // comme les cartes texte voisines, dont l'encre s'arrête à gauche.
+  const html = fs.readFileSync(`${TPL_DIR}/banner.html`, 'utf8');
+  const rule = /\.goal-dock-card\s*\{([^}]*)\}/.exec(html);
+  assert.ok(rule, 'règle .goal-dock-card introuvable');
+  assert.ok(/width:\s*min\(/.test(rule[1]), rule[1]);
+  assert.ok(/margin-right:\s*auto/.test(rule[1]),
+    'sans margin-right:auto, le justify-content:center de .card-container recentre le bloc');
+  assert.ok(!/flex:\s*1 1 100%/.test(rule[1]), 'le bloc reprend toute la largeur');
+});
+
+check('les tailles de la carte ne débordent pas sur les barres fixes', () => {
+  const html = fs.readFileSync(`${TPL_DIR}/banner.html`, 'utf8');
+  // Double classe obligatoire : le partiel est inclus après le <style> de la page,
+  // donc `.goal-dock-card` seul perdrait à spécificité égale et la carte
+  // reprendrait silencieusement le calibrage du dock.
+  assert.ok(/\.goal-dock-card\.goal-banner\s*\{[^}]*--goal-title-size/.test(html),
+    'les tailles de la carte ne sont pas portées par la double classe');
+  // Une règle sur `.goal-banner` seul redimensionnerait aussi les barres fixes,
+  // dont la hauteur mesurée rétrécit la zone des cartes.
+  assert.ok(!/(^|[\s,{}])\.goal-banner\s*\{/m.test(html),
+    'banner.html redimensionne l’habillage partagé au lieu de la seule carte');
+});
+
 check('la carte d’objectif ne construit aucun HTML par concaténation', () => {
   const { api } = mountBanner();
   api.applyBannerConfig({ cards: [goalCard('c1', null)] });

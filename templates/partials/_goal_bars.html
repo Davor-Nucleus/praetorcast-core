@@ -140,8 +140,10 @@
        Les tailles passent en `clamp()` comme `.banner-text` : c'est le viewport
        qui commande, `--goal-scale` ne servant plus qu'à ajuster. */
     .goal-banner {
-        --goal-title-size: calc(clamp(1.5rem, 3.2vw, 3.6rem) * var(--goal-scale, 1));
-        --goal-num-size:   calc(clamp(1.3rem, 2.8vw, 3.1rem) * var(--goal-scale, 1));
+        --goal-title-size: calc(clamp(1.5rem, 3.2vw, 3.6rem) * var(--pc-font-scale) * var(--goal-scale, 1));
+        --goal-num-size:   calc(clamp(1.3rem, 2.8vw, 3.1rem) * var(--pc-font-scale) * var(--goal-scale, 1));
+        /* Une géométrie, pas du texte : la piste suit `--goal-scale` seul, comme
+           la règle de base. */
         --goal-track-h:    calc(clamp(1rem, 2vw, 2.2rem) * var(--goal-scale, 1));
     }
 
@@ -164,9 +166,15 @@
         animation: goalGradientShift 5s ease infinite;
     }
 
+    /* `min-width` : le titre doit céder avant les chiffres. `.goal-head` est un
+       flex `space-between` et `.goal-numbers` est en `nowrap` ; un span flex ne
+       descend pas sous son min-content sans `min-width: 0`, si bien qu'un titre
+       long pousserait les chiffres hors du bloc au lieu de se replier. */
     .goal-banner .goal-title {
         font-size: var(--goal-title-size);
         line-height: 1.05;
+        min-width: 0;
+        overflow-wrap: break-word;
     }
 
     .goal-banner .goal-numbers {

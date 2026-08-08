@@ -143,18 +143,34 @@
         .goal-dock.dock-top    { top: 0; }
         .goal-dock.hide        { display: none; }
 
-        /* En carte, le dock n'est plus ancré : il occupe la largeur du conteneur
-           et se laisse animer par la transition de la carte qui le porte.
-           Aucune échelle imposée : les `clamp()` de l'habillage bannière sont déjà
-           calibrés pour le plein écran. */
+        /* En carte, le dock n'est plus ancré : il se laisse animer par la
+           transition de la carte qui le porte.
+
+           Ancré à gauche comme l'encre des cartes voisines : `margin-right: auto`
+           neutralise le `justify-content: center` de `.card-container`, et la
+           largeur réduite laisse à droite le même vide qu'une carte texte. Bord à
+           bord, la barre se lisait comme une autre maquette que ses voisines.
+           `padding: 0` garde le bord gauche des barres sur celui de l'image des
+           cartes illustrées (les 24 px de `.text-section` ne concernent que les
+           cartes sans image). */
         .goal-dock-card {
             position: static;
-            flex: 1 1 100%;
+            flex: 0 1 auto;
+            width: min(64%, 1040px);
+            margin-right: auto;
             gap: 2.4rem;
             padding: 0;
-            /* Même largeur utile que `.card-container`, pour que les barres
-               s'alignent sur le texte des cartes voisines. */
-            max-width: min(92vw, 1600px);
+        }
+
+        /* L'habillage bannière est calibré pour un dock bord à bord ; en carte, le
+           bloc est deux fois plus étroit et doit peser autant qu'un titre de carte
+           texte. Double classe obligatoire : le partiel est inclus après ce
+           <style>, donc à spécificité égale ce sont ses valeurs qui l'emporteraient
+           — et les barres fixes, elles, doivent garder leur calibrage. */
+        .goal-dock-card.goal-banner {
+            --goal-title-size: calc(clamp(2rem, 4.2vw, 4.6rem) * var(--pc-font-scale) * var(--goal-scale, 1));
+            --goal-num-size:   calc(clamp(1.6rem, 3.4vw, 3.8rem) * var(--pc-font-scale) * var(--goal-scale, 1));
+            --goal-track-h:    calc(clamp(1.1rem, 2.3vw, 2.5rem) * var(--goal-scale, 1));
         }
 
         /* Dégradé animé sur le texte */

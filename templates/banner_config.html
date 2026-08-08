@@ -332,17 +332,27 @@
            source OBS plein écran : appliqué tel quel dans une scène de 200 px de
            haut, il déborderait. Les trois tailles sont donc reprises en absolu.
            Tout le reste — dégradé animé, rayons, couleurs — vient du composant
-           partagé, donc l'aperçu ne peut pas diverger de l'affichage réel. */
-        .preview-goals {
+           partagé, donc l'aperçu ne peut pas diverger de l'affichage réel.
+
+           NE PAS simplifier en `.preview-goals` : le partiel est inclus après ce
+           <style>, donc à spécificité égale ses `clamp()` gagneraient et les trois
+           tailles ci-dessous redeviendraient inertes — sans rien casser de
+           visible, l'aperçu se contentant de déborder. */
+        .preview-goals.goal-banner {
             display: flex;
             flex-direction: column;
             gap: 1rem;
-            width: 88%;
+            /* Même composition que l'overlay : le bloc occupe 64 % du conteneur
+               de carte, ancré sur son bord gauche. Ici ce conteneur est
+               `.preview-stage .card-container`, large de 80 % de la scène — d'où
+               les 51,2 % (0,64 × 80) et le retrait de 10 %. */
+            width: 51.2%;
+            margin-inline: 10% auto;
             font-family: var(--pc-font);
             color: var(--pc-text);
-            --goal-title-size: 1.4rem;
-            --goal-num-size: 1.15rem;
-            --goal-track-h: 0.85rem;
+            --goal-title-size: 1.9rem;
+            --goal-num-size: 1.5rem;
+            --goal-track-h: 1.05rem;
         }
 
         /* --- Aperçu en direct d'une carte (reproduit le rendu de l'overlay) --- */
@@ -391,12 +401,15 @@
             padding: var(--spacing-md);
         }
 
+        /* Cadrage à gauche comme l'overlay : un aperçu centré ne montrerait pas
+           où l'encre d'une carte commence, or c'est précisément ce qu'on vient
+           régler entre cartes texte et cartes objectif. */
         .preview-stage .card-container {
             width: 80%;
             display: flex;
             flex-direction: row;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             gap: var(--spacing-md);
         }
 
@@ -414,7 +427,7 @@
             margin: 0;
             font-size: 1.75rem;
             font-weight: bold;
-            text-align: center;
+            text-align: left;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
