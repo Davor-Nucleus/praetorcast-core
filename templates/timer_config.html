@@ -421,6 +421,46 @@
         </section>
 
         <section class="card">
+            <h2 class="card-title">Subathon</h2>
+            <p class="hint">
+                Les événements Twitch rallongent le compte à rebours. Le temps est ajouté
+                même compteur en pause, et le total reste plafonné à 7 jours.
+            </p>
+
+            <div class="toggles">
+                <label class="toggle">
+                    <input type="checkbox" id="subathonEnabled"> Activer le subathon
+                </label>
+            </div>
+
+            <div class="grid" id="subathonFields">
+                <div class="field">
+                    <label class="control-label" for="msPerSub">Par abonnement</label>
+                    <input class="input-field" id="msPerSub" type="number" min="0" step="1">
+                    <span class="hint">Secondes ajoutées par abonnement ou réabonnement, tous paliers confondus.</span>
+                </div>
+
+                <div class="field">
+                    <label class="control-label" for="msPerGiftSub">Par abonnement offert</label>
+                    <input class="input-field" id="msPerGiftSub" type="number" min="0" step="1">
+                    <span class="hint">Compté par sub offert : un don de 5 ajoute cinq fois cette valeur.</span>
+                </div>
+
+                <div class="field">
+                    <label class="control-label" for="msPer100Bits">Pour 100 bits</label>
+                    <input class="input-field" id="msPer100Bits" type="number" min="0" step="1">
+                    <span class="hint">Proratisé au bit près : 50 bits ajoutent la moitié.</span>
+                </div>
+
+                <div class="field">
+                    <label class="control-label" for="msPerRaider">Par spectateur d'un raid</label>
+                    <input class="input-field" id="msPerRaider" type="number" min="0" step="1">
+                    <span class="hint">À 0, les raids n'ajoutent rien — un gros raid ferait exploser le compteur.</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
             <h2 class="card-title">Source OBS</h2>
             <p class="hint">
                 Ajoute une source navigateur sur cette URL. Les contrôles peuvent rester
@@ -514,6 +554,25 @@
             $("useTheme").checked   = !payload.accentColor;
             $("accentColor").value  = payload.accentColor || "#3b82f6";
             $("accentColor").disabled = !payload.accentColor;
+
+            // Le modèle compte en millisecondes, le formulaire en secondes : c'est la
+            // seule unité dans laquelle un streamer règle « +5 min par sub ».
+            const sub = payload.subathon || {};
+            $("subathonEnabled").checked = sub.enabled === true;
+            $("msPerSub").value      = Math.round((sub.msPerSub ?? 300000) / 1000);
+            $("msPerGiftSub").value  = Math.round((sub.msPerGiftSub ?? 300000) / 1000);
+            $("msPer100Bits").value  = Math.round((sub.msPer100Bits ?? 60000) / 1000);
+            $("msPerRaider").value   = Math.round((sub.msPerRaider ?? 0) / 1000);
+            syncSubathonFields();
+        }
+
+        /// Les durées n'ont aucun sens tant que le subathon est éteint : on les grise
+        /// plutôt que de les masquer, pour qu'elles restent consultables.
+        function syncSubathonFields() {
+            const on = $("subathonEnabled").checked;
+            ["msPerSub", "msPerGiftSub", "msPer100Bits", "msPerRaider"]
+                .forEach((id) => { $(id).disabled = !on; });
+            $("subathonFields").style.opacity = on ? "1" : "0.5";
         }
 
         async function loadConfig() {
@@ -524,6 +583,12 @@
             } catch (e) {
                 setStatus("Chargement impossible : " + e.message, "error");
             }
+        }
+
+        /// Champ en secondes → millisecondes, borné à 0. Le serveur attend un entier
+        /// non signé : un champ vidé au clavier arriverait sinon en NaN.
+        function seconds_ms(id) {
+            return Math.max(0, parseInt($(id).value, 10) || 0) * 1000;
         }
 
         async function saveConfig() {
@@ -538,6 +603,13 @@
                 // Case cochée : on renvoie une couleur vide, l'overlay retombe alors
                 // sur l'accent du thème global.
                 accentColor: $("useTheme").checked ? "" : $("accentColor").value,
+                subathon: {
+                    enabled: $("subathonEnabled").checked,
+                    msPerSub: seconds_ms("msPerSub"),
+                    msPerGiftSub: seconds_ms("msPerGiftSub"),
+                    msPer100Bits: seconds_ms("msPer100Bits"),
+                    msPerRaider: seconds_ms("msPerRaider"),
+                },
             };
 
             try {
@@ -592,6 +664,8 @@
         $("useTheme").addEventListener("change", () => {
             $("accentColor").disabled = $("useTheme").checked;
         });
+
+        $("subathonEnabled").addEventListener("change", syncSubathonFields);
 
         // Barre d'espace = démarrer/pause, sauf en train de saisir un champ — le
         // raccourci sert justement à ne pas viser un bouton en plein direct.

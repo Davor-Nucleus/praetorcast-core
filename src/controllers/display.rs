@@ -23,6 +23,13 @@ struct ClockTemplate {
 #[template(path = "banner.html")]
 struct BannerTemplate;
 
+// Pas de champ `name` : l'overlay lit `?name=` côté client. Le WebSocket lui
+// pousse toutes les sections, il doit de toute façon savoir retrouver la sienne à
+// chaque push — le filtrer aussi côté serveur dupliquerait cette logique.
+#[derive(Template)]
+#[template(path = "text.html")]
+struct TextTemplate;
+
 #[derive(Template)]
 #[template(path = "music_current.html")]
 struct MusicCurrentTemplate {
@@ -96,6 +103,10 @@ pub async fn clock(query: web::Query<ClockQuery>) -> impl Responder {
 
 pub async fn banner() -> impl Responder {
     render(BannerTemplate.render().unwrap())
+}
+
+pub async fn text() -> impl Responder {
+    render(TextTemplate.render().unwrap())
 }
 
 pub async fn music_current() -> impl Responder {

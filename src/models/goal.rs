@@ -6,8 +6,16 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::sync::Mutex;
 
 const GOAL_PATH: &str = "data/goal.json";
+
+/// Sérialise les écritures de `data/goal.json` **de ce processus**.
+///
+/// `/api/goal/adjust` (Stream Deck) et le « Enregistrer » de `/goal-config` écrivent
+/// tous deux le tableau entier : sans verrou, un ajustement qui atterrit entre le
+/// chargement et l'enregistrement de la page est silencieusement perdu. Voir `update`.
+static WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 /// D'où vient la valeur courante d'une barre.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -96,6 +104,20 @@ impl Goal {
         }
     }
 
+    /// Ajoute (ou retire) au compteur libre.
+    ///
+    /// Agit sur `manual_current` **brut**, exactement le champ que le configurateur
+    /// édite — donc pas sur la valeur affichée, dont `current_from` retranche
+    /// `baseline`. La saturation des deux côtés évite qu'un `delta` négatif de trop
+    /// repasse par le haut, `manual_current` étant un `u64`.
+    pub fn adjust_manual(&mut self, delta: i64) {
+        self.manual_current = if delta >= 0 {
+            self.manual_current.saturating_add(delta as u64)
+        } else {
+            self.manual_current.saturating_sub(delta.unsigned_abs())
+        };
+    }
+
     /// Pourcentage d'avancement, borné à [0, 100].
     ///
     /// Une cible à 0 renverrait une division par zéro : on la traite comme un
@@ -125,16 +147,15 @@ enum GoalFileCompat {
     Legacy(Box<Goal>),
 }
 
-/// Lit `data/goal.json`. Un fichier absent crée la configuration par défaut plutôt
-/// que de remonter une erreur : l'overlay doit toujours pouvoir s'afficher.
-pub fn read() -> Result<Vec<Goal>, String> {
+/// Lit `data/goal.json`. Un fichier absent vaut la configuration par défaut plutôt
+/// qu'une erreur : l'overlay doit toujours pouvoir s'afficher.
+///
+/// Ne prend pas le verrou : un lecteur n'a rien à sérialiser, et l'écriture atomique
+/// de `write_unlocked` garantit qu'il ne verra jamais un fichier à moitié écrit.
+fn read_unlocked() -> Result<Vec<Goal>, String> {
     let content = match fs::read_to_string(GOAL_PATH) {
         Ok(c) => c,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            let default = vec![Goal::default()];
-            write(&default)?;
-            return Ok(default);
-        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![Goal::default()]),
         Err(e) => return Err(format!("Error reading goal.json: {e}")),
     };
 
@@ -147,13 +168,48 @@ pub fn read() -> Result<Vec<Goal>, String> {
     })
 }
 
-pub fn write(goals: &[Goal]) -> Result<(), String> {
+/// Écrit par fichier temporaire puis `rename` : `goal_ws` relit le fichier chaque
+/// seconde pour chaque overlay connecté, et une troncature surprise en plein direct
+/// viderait les barres.
+fn write_unlocked(goals: &[Goal]) -> Result<(), String> {
     let file = GoalFile {
         goals: goals.to_vec(),
     };
     let json = serde_json::to_string_pretty(&file).map_err(|e| format!("Error serializing: {e}"))?;
     fs::create_dir_all("data").map_err(|e| format!("Error creating data dir: {e}"))?;
-    fs::write(GOAL_PATH, json).map_err(|e| format!("Error writing goal.json: {e}"))
+
+    let tmp = format!("{GOAL_PATH}.tmp");
+    fs::write(&tmp, json).map_err(|e| format!("Error writing goal.json: {e}"))?;
+    fs::rename(&tmp, GOAL_PATH).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("Error replacing goal.json: {e}")
+    })
+}
+
+pub fn read() -> Result<Vec<Goal>, String> {
+    read_unlocked()
+}
+
+pub fn write(goals: &[Goal]) -> Result<(), String> {
+    let _guard = WRITE_LOCK.lock().unwrap();
+    write_unlocked(goals)
+}
+
+/// Lit, modifie et réécrit la liste en un seul geste sérialisé.
+///
+/// `change` renvoie une erreur pour annuler l'écriture — c'est ainsi qu'un
+/// identifiant introuvable n'écrase pas le fichier avec une liste inchangée.
+///
+/// Appelle les versions sans verrou : passer par `read`/`write` publics le
+/// reprendrait, et `std::sync::Mutex` n'est pas réentrant.
+pub fn update(
+    change: impl FnOnce(&mut Vec<Goal>) -> Result<(), String>,
+) -> Result<Vec<Goal>, String> {
+    let _guard = WRITE_LOCK.lock().unwrap();
+    let mut goals = read_unlocked()?;
+    change(&mut goals)?;
+    write_unlocked(&goals)?;
+    Ok(goals)
 }
 
 #[cfg(test)]
@@ -254,6 +310,41 @@ mod tests {
         assert_eq!(followers.current_from(Some(30)), Some(30));
         // Source indisponible (jeton sans le scope) : pas de valeur, pas de 0 trompeur.
         assert_eq!(followers.current_from(None), None);
+    }
+
+    #[test]
+    fn ajuster_le_compteur_libre_sature_aux_deux_bouts() {
+        let mut g = goal(GoalSource::Manual, 100);
+        g.manual_current = 10;
+
+        g.adjust_manual(5);
+        assert_eq!(g.manual_current, 15);
+        g.adjust_manual(-5);
+        assert_eq!(g.manual_current, 10);
+
+        // Retirer plus que le compteur : sature à 0, `manual_current` étant un u64
+        // qui repasserait sinon par le haut.
+        g.adjust_manual(-999);
+        assert_eq!(g.manual_current, 0);
+
+        // Et par le haut, un delta aberrant ne déborde pas.
+        g.manual_current = u64::MAX - 1;
+        g.adjust_manual(i64::MAX);
+        assert_eq!(g.manual_current, u64::MAX);
+    }
+
+    #[test]
+    fn ajuster_agit_sur_la_valeur_brute_pas_sur_l_affichee() {
+        // Piège de conception à garder verrouillé : `/api/goal/adjust` écrit le même
+        // champ que le configurateur, et c'est `current_from` qui retranche ensuite
+        // la ligne de base. Un +50 doit donc bien ajouter 50 au champ brut.
+        let mut g = goal(GoalSource::Manual, 200);
+        g.baseline = 20;
+        g.manual_current = 100;
+
+        g.adjust_manual(50);
+        assert_eq!(g.manual_current, 150);
+        assert_eq!(g.current_from(None), Some(130));
     }
 
     #[test]

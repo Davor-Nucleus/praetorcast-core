@@ -97,6 +97,12 @@ pub async fn ws_handler(
                 "total_followers": g.total_followers,
                 "last_follower": g.last_follower,
                 "connected": g.connected,
+                // `stream.online` / `stream.offline`. Faux tant qu'aucune
+                // notification n'est arrivée : un serveur lancé en cours de direct
+                // ne le sait pas avant le prochain basculement.
+                "live": g.live,
+                // RFC 3339 tel que Twitch l'envoie : `Date.parse` le lit nativement.
+                "streamStartedAt": g.stream_started_at,
             })
             .to_string()
         };

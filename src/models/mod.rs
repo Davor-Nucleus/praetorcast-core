@@ -3,6 +3,7 @@ pub mod env_file;
 pub mod settings;
 pub mod theme;
 pub mod banner;
+pub mod text;
 pub mod goal;
 pub mod scheduler;
 pub mod channel_point;

@@ -1,0 +1,414 @@
+<!--
+    Composant « texte animé », partagé par /text et /text-config.
+
+    Même rôle que partials/_goal_bars.html : le rendu existerait sinon en double
+    (l'overlay et l'aperçu du configurateur), et deux copies d'une dizaine
+    d'animations ne sont pas tenables. L'aperçu montre donc le rendu réel, pas une
+    approximation.
+
+    À inclure AVANT le script de la page — `createTextRenderer` doit être défini
+    quand la page l'appelle. Le partiel ne style que l'intérieur d'une section ; la
+    géométrie du conteneur (plein écran pour l'overlay, cadre borné pour l'aperçu)
+    reste à la charge de chaque page.
+
+    Un partiel Askama et pas un fichier de /public/js : `compile/build.cjs` ne
+    copie que les .exe, jamais public/. Un nouvel asset n'atteindrait donc jamais
+    le dossier d'exécution, alors que les templates sont compilés dans le binaire.
+-->
+<style>
+    /* --- Géométrie ------------------------------------------------------------
+       Le conteneur (`.text-stage`) place le bloc selon `align` / `verticalAlign` ;
+       le bloc porte le fond et les marges ; la ligne porte l'animation d'entrée ;
+       le contenu porte l'effet continu. Quatre niveaux, parce qu'une entrée et un
+       effet posent tous deux un `transform` et s'écraseraient sur un seul nœud. */
+    .text-stage {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .text-stage.valign-top    { align-items: flex-start; }
+    .text-stage.valign-middle { align-items: center; }
+    .text-stage.valign-bottom { align-items: flex-end; }
+
+    .text-stage.align-left   { justify-content: flex-start; }
+    .text-stage.align-center { justify-content: center; }
+    .text-stage.align-right  { justify-content: flex-end; }
+
+    .text-block {
+        max-width: 100%;
+        padding: clamp(0.4rem, 1.6vw, 1.6rem) clamp(0.6rem, 2vw, 2rem);
+        border-radius: var(--pc-radius);
+        /* Vide par défaut : une source navigateur OBS se pose par-dessus un
+           gameplay, un fond opaque serait le mauvais défaut. */
+        background: var(--text-bg, transparent);
+    }
+
+    /* Le marquee traverse toute la largeur : le bloc cesse d'être dimensionné par
+       son contenu, et `align` n'a plus de prise (signalé dans le configurateur). */
+    .text-stage.has-marquee .text-block {
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .text-line {
+        /* `both` sur les entrées : sans lui la ligne repasse à son état initial
+           (souvent opacity 0) à la fin de l'animation. */
+        animation-fill-mode: both;
+    }
+
+    .text-content {
+        display: inline-block;
+        margin: 0;
+        font-family: var(--pc-font);
+        font-weight: 700;
+        line-height: 1.15;
+        color: var(--text-color, var(--pc-text));
+        text-shadow: var(--pc-shadow);
+        overflow-wrap: break-word;
+        word-break: break-word;
+        white-space: pre-wrap;
+        /* Comme les barres d'objectif : une taille en clamp() se cale seule sur la
+           largeur de la source, `--text-scale` ne sert qu'à s'en écarter. */
+        font-size: calc(clamp(1.8rem, 6vw, 7rem) * var(--pc-font-scale) * var(--text-scale, 1));
+    }
+
+    .text-stage.align-left   .text-content { text-align: left; }
+    .text-stage.align-center .text-content { text-align: center; }
+    .text-stage.align-right  .text-content { text-align: right; }
+
+    /* Découpage par lettre — nécessaire à `typewriter` et à `wave`, inutile
+       ailleurs (voir `needsChars` dans le script). `pre` conserve les espaces,
+       qui deviennent des spans comme les autres. */
+    .text-char {
+        display: inline-block;
+        white-space: pre;
+    }
+
+    /* --- Animations d'entrée (classe `anim-*` sur .text-line) ------------------
+       Reprises de banner.html : mêmes courbes, pour que les deux overlays se
+       ressemblent. La durée vient de `--text-anim-ms` au lieu d'être figée. */
+    .text-line.anim-fade  { animation: text-fade  var(--text-anim-ms, 800ms) ease-out both; }
+    .text-line.anim-slide { animation: text-slide var(--text-anim-ms, 800ms) cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .text-line.anim-zoom  { animation: text-zoom  var(--text-anim-ms, 800ms) cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .text-line.anim-flip  { animation: text-flip  var(--text-anim-ms, 800ms) cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+    @keyframes text-fade  { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes text-slide { from { opacity: 0; transform: translateX(60%); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes text-zoom  { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+    @keyframes text-flip  { from { opacity: 0; transform: perspective(1200px) rotateX(90deg); } to { opacity: 1; transform: perspective(1200px) rotateX(0); } }
+
+    /* Machine à écrire : chaque lettre bascule à son tour, l'ensemble tenant dans
+       `--text-anim-ms`. Le pas est calculé en CSS (`/ var(--char-count)`) plutôt
+       qu'écrit lettre par lettre en JS — un seul style inline suffit alors. */
+    .text-line.anim-typewriter .text-char {
+        opacity: 0;
+        animation: text-fade 1ms linear both;
+        animation-delay: calc(var(--char-index) * (var(--text-anim-ms, 800ms) / var(--char-count, 1)));
+    }
+
+    .text-cursor {
+        display: inline-block;
+        width: 0.08em;
+        margin-left: 0.06em;
+        background: currentColor;
+        /* `currentColor` suit `--text-color`, mais pas un texte en dégradé (qui
+           est transparent) : le curseur y reprend l'accent du thème. */
+        align-self: stretch;
+        animation: text-caret 1s steps(1, end) infinite;
+    }
+
+    .fx-gradient + .text-cursor { background: var(--pc-accent); }
+
+    @keyframes text-caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+    /* --- Effets continus (classe `fx-*` sur .text-content) --------------------
+       Posés APRÈS la fin de l'entrée (cf. script) : les deux animent la même
+       propriété `transform` et l'effet, en boucle, l'emporterait sur l'entrée. */
+    .text-content.fx-pulse { animation: text-pulse var(--text-effect-ms, 2000ms) ease-in-out infinite; }
+
+    @keyframes text-pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50%      { transform: scale(1.06); opacity: 0.82; }
+    }
+
+    /* Vague : les lettres montent l'une après l'autre. Le décalage se propage sur
+       ~18 lettres, ce qui garde une onde visible aussi bien sur un mot court que
+       sur une phrase. */
+    .text-content.fx-wave .text-char {
+        animation: text-wave var(--text-effect-ms, 2000ms) ease-in-out infinite;
+        animation-delay: calc(var(--char-index) * (var(--text-effect-ms, 2000ms) / 18));
+    }
+
+    @keyframes text-wave {
+        0%, 60%, 100% { transform: translateY(0); }
+        30%           { transform: translateY(-0.22em); }
+    }
+
+    .text-content.fx-gradient {
+        background: var(--pc-gradient);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        background-size: 200% auto;
+        animation: text-gradient var(--text-effect-ms, 2000ms) ease infinite;
+    }
+
+    @keyframes text-gradient {
+        0%   { background-position: 0% 50%; }
+        50%  { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    /* Défilement : `min-width: 100%` est indispensable. Sans lui, `translateX(100%)`
+       vaut la largeur du *texte* — un texte court démarrerait déjà dans le cadre au
+       lieu d'entrer par la droite. */
+    .text-content.fx-marquee {
+        display: inline-block;
+        min-width: 100%;
+        white-space: nowrap;
+        animation: text-marquee var(--text-effect-ms, 2000ms) linear infinite;
+    }
+
+    @keyframes text-marquee {
+        from { transform: translateX(100%); }
+        to   { transform: translateX(-100%); }
+    }
+
+    /* Glitch : deux copies décalées en cyan/magenta, tirées de `data-text` via
+       `attr()`. Le contenu passe donc par un attribut, jamais par du HTML
+       concaténé — un texte saisi librement ne peut rien injecter. */
+    .text-content.fx-glitch {
+        position: relative;
+        animation: text-glitch-base var(--text-effect-ms, 2000ms) steps(1, end) infinite;
+    }
+
+    .text-content.fx-glitch::before,
+    .text-content.fx-glitch::after {
+        content: attr(data-text);
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        text-shadow: none;
+    }
+
+    .text-content.fx-glitch::before {
+        color: #00e5ff;
+        animation: text-glitch-a var(--text-effect-ms, 2000ms) steps(1, end) infinite;
+    }
+
+    .text-content.fx-glitch::after {
+        color: #ff00d4;
+        animation: text-glitch-b var(--text-effect-ms, 2000ms) steps(1, end) infinite;
+    }
+
+    @keyframes text-glitch-base {
+        0%, 88%, 100% { transform: translate(0); }
+        90%           { transform: translate(-0.02em, 0.01em); }
+        94%           { transform: translate(0.02em, -0.01em); }
+    }
+
+    @keyframes text-glitch-a {
+        0%, 86%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); }
+        88%           { clip-path: inset(6% 0 62% 0); transform: translate(-0.04em, 0); }
+        92%           { clip-path: inset(48% 0 22% 0); transform: translate(0.03em, 0); }
+    }
+
+    @keyframes text-glitch-b {
+        0%, 86%, 100% { clip-path: inset(100% 0 0 0); transform: translate(0); }
+        90%           { clip-path: inset(28% 0 44% 0); transform: translate(0.04em, 0); }
+        96%           { clip-path: inset(70% 0 8% 0);  transform: translate(-0.03em, 0); }
+    }
+
+    /* Une source OBS ne clignote jamais malgré la préférence système, mais un
+       aperçu ouvert dans le navigateur du streamer, si. */
+    @media (prefers-reduced-motion: reduce) {
+        .text-line,
+        .text-content,
+        .text-char,
+        .text-cursor,
+        .text-content::before,
+        .text-content::after {
+            animation: none !important;
+            opacity: 1 !important;
+        }
+    }
+</style>
+
+<script>
+    /**
+     * Rendu d'une section de texte dans `root`.
+     *
+     * Le contrat tient en deux points :
+     *
+     *  - `render(section)` est idempotent. Tant que l'empreinte de la section ne
+     *    change pas, le DOM n'est pas touché — le WebSocket pousse la config
+     *    entière chaque seconde, reconstruire à chaque passage relancerait le
+     *    typewriter en plein direct. Même idée que `rotationSignature()` dans
+     *    banner.html.
+     *  - L'effet continu ne démarre qu'une fois l'entrée terminée. Les deux
+     *    animent `transform` sur des nœuds imbriqués et, surtout, un `wave` posé
+     *    d'emblée écraserait le dévoilement lettre à lettre du typewriter.
+     */
+    function createTextRenderer(root) {
+        const ENTRANCES = ['fade', 'slide', 'zoom', 'flip', 'typewriter'];
+        const EFFECTS = ['marquee', 'pulse', 'wave', 'glitch', 'gradient'];
+        const ALIGNS = ['left', 'center', 'right'];
+        const VALIGNS = ['top', 'middle', 'bottom'];
+
+        /** Champs qui changent le rendu. Un champ absent d'ici ne provoque pas de
+         *  reconstruction : `label` et `order` ne se voient pas dans l'overlay. */
+        function sectionSignature(section) {
+            if (!section) return '';
+            return [
+                section.content,
+                section.animation,
+                section.effect,
+                section.animationMs,
+                section.effectMs,
+                section.scale,
+                section.color,
+                section.align,
+                section.verticalAlign,
+                section.backgroundColor,
+            ].join(' ');
+        }
+
+        function oneOf(value, allowed, fallback) {
+            return allowed.includes(value) ? value : fallback;
+        }
+
+        function positiveMs(value, fallback) {
+            const n = Number(value);
+            return Number.isFinite(n) && n > 0 ? n : fallback;
+        }
+
+        let signature = null;
+        let effectTimer = null;
+
+        /** Remplit `el` avec un span par caractère, indexé pour les délais CSS. */
+        function fillChars(el, content) {
+            const chars = Array.from(content);
+            for (const [i, char] of chars.entries()) {
+                const span = document.createElement('span');
+                span.className = 'text-char';
+                span.style.setProperty('--char-index', String(i));
+                // textContent, jamais innerHTML : le contenu vient d'un champ libre.
+                span.textContent = char;
+                el.appendChild(span);
+            }
+            el.style.setProperty('--char-count', String(chars.length || 1));
+        }
+
+        function build(section) {
+            const animation = oneOf(section.animation, ENTRANCES, 'none');
+            const effect = oneOf(section.effect, EFFECTS, 'none');
+            const animMs = positiveMs(section.animationMs, 800);
+            const effectMs = positiveMs(section.effectMs, 2000);
+            const content = typeof section.content === 'string' ? section.content : '';
+
+            const stage = document.createElement('div');
+            stage.className = [
+                'text-stage',
+                'align-' + oneOf(section.align, ALIGNS, 'center'),
+                'valign-' + oneOf(section.verticalAlign, VALIGNS, 'middle'),
+                effect === 'marquee' ? 'has-marquee' : '',
+            ].filter(Boolean).join(' ');
+
+            const scale = Number(section.scale);
+            stage.style.setProperty('--text-scale', Number.isFinite(scale) && scale > 0 ? String(scale) : '1');
+            stage.style.setProperty('--text-anim-ms', animMs + 'ms');
+            stage.style.setProperty('--text-effect-ms', effectMs + 'ms');
+            if (section.color) stage.style.setProperty('--text-color', section.color);
+            if (section.backgroundColor) stage.style.setProperty('--text-bg', section.backgroundColor);
+
+            const block = document.createElement('div');
+            block.className = 'text-block';
+
+            const line = document.createElement('div');
+            line.className = 'text-line' + (animation === 'none' ? '' : ' anim-' + animation);
+
+            const el = document.createElement('span');
+            el.className = 'text-content';
+            // `data-text` alimente les deux copies du glitch (content: attr(...)).
+            el.setAttribute('data-text', content);
+
+            // Le découpage sert au dévoilement du typewriter et à l'ondulation de
+            // wave ; partout ailleurs un simple nœud texte suffit et se coupe
+            // correctement en fin de ligne.
+            if (animation === 'typewriter' || effect === 'wave') {
+                fillChars(el, content);
+            } else {
+                el.textContent = content;
+            }
+
+            line.appendChild(el);
+
+            if (animation === 'typewriter') {
+                const cursor = document.createElement('span');
+                cursor.className = 'text-cursor';
+                line.appendChild(cursor);
+            }
+
+            block.appendChild(line);
+            stage.appendChild(block);
+
+            return { stage, line, el, animation, effect, animMs };
+        }
+
+        return {
+            root,
+
+            /**
+             * Affiche `section`, ou vide le conteneur si elle est absente.
+             * Ne reconstruit que si l'empreinte a changé.
+             */
+            render(section) {
+                const next = sectionSignature(section);
+                if (next === signature) return false;
+                signature = next;
+
+                if (effectTimer !== null) {
+                    clearTimeout(effectTimer);
+                    effectTimer = null;
+                }
+                root.textContent = '';
+
+                if (!section) return true;
+
+                const built = build(section);
+                root.appendChild(built.stage);
+
+                if (built.effect !== 'none') {
+                    // Retirer la classe d'entrée avant de poser l'effet : les
+                    // règles `.anim-typewriter .text-char` et `.fx-wave .text-char`
+                    // ont la même spécificité, celle qui reste gagnerait par ordre
+                    // de déclaration et non par intention.
+                    const start = () => {
+                        built.line.classList.remove('anim-' + built.animation);
+                        built.el.classList.add('fx-' + built.effect);
+                        effectTimer = null;
+                    };
+                    if (built.animation === 'none') start();
+                    else effectTimer = setTimeout(start, built.animMs);
+                }
+
+                return true;
+            },
+
+            /** Vide le conteneur et oublie l'empreinte (le prochain `render` reconstruit). */
+            clear() {
+                if (effectTimer !== null) {
+                    clearTimeout(effectTimer);
+                    effectTimer = null;
+                }
+                signature = null;
+                root.textContent = '';
+            },
+
+            /** Exposée pour les tests : l'empreinte est le cœur du « ne pas rejouer ». */
+            signatureOf: sectionSignature,
+        };
+    }
+</script>

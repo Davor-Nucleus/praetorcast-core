@@ -131,77 +131,39 @@
         const WATCHDOG_GRACE_MS = 1000;
         // Doit correspondre à la durée des animations `-out` du CSS.
         const OUT_MS = 500;
-        // Le serveur empile les redemptions tant qu'aucun overlay n'est connecté :
-        // on plafonne pour ne pas rejouer une rafale d'anciens échanges à l'ouverture.
+        // Une alerte dure plusieurs secondes : sur une rafale (un raid suivi de dons
+        // d'abonnements), la file finirait par avoir des minutes de retard sur le
+        // direct. Au-delà, on préfère perdre des alertes que les jouer en décalé.
         const MAX_QUEUE = 10;
-
-        let rewardsByTitle = {};
-        let rewardsDelivered = false;
-        let refreshInFlight = null;
 
         const pending = [];
         let isPlaying = false;
 
-        // --- Configuration des récompenses -----------------------------------
-
-        function applyRewardsMap(map) {
-            rewardsByTitle = map && typeof map === 'object' ? map : {};
-        }
-
-        function applyRewardsList(list) {
-            const map = {};
-            (Array.isArray(list) ? list : []).forEach((reward) => {
-                if (reward && reward.reward_title) {
-                    map[reward.reward_title] = reward;
-                }
-            });
-            applyRewardsMap(map);
-        }
-
-        // La WS ne pousse la config qu'à la connexion : on relit le fichier via HTTP
-        // quand un titre inconnu arrive (récompense ajoutée depuis).
-        function refreshRewards() {
-            if (!refreshInFlight) {
-                refreshInFlight = fetch('/api/channel-points-config')
-                    .then((response) => (response.ok ? response.json() : []))
-                    .then(applyRewardsList)
-                    .catch((error) => console.error('Channel point config error:', error))
-                    .then(() => { refreshInFlight = null; });
-            }
-            return refreshInFlight;
-        }
-
-        async function resolveReward(title) {
-            if (rewardsByTitle[title]) return rewardsByTitle[title];
-            await refreshRewards();
-            return rewardsByTitle[title] || null;
-        }
-
         // --- File d'attente ---------------------------------------------------
 
-        function enqueue(redemption) {
-            if (!redemption || !redemption.reward_title) return;
+        // Le serveur envoie l'alerte **déjà résolue** : `event` décrit ce qui s'est
+        // passé, `config` la ligne de `channel_points.json` retenue pour l'afficher.
+        // La sélection (titre exact pour les points de chaîne, palier de montant pour
+        // les autres) vit dans `models::channel_point::select`, où elle est testée
+        // sans navigateur.
+        function enqueue(item) {
+            if (!item || !item.config || !item.event) return;
             if (pending.length >= MAX_QUEUE) {
-                console.warn('File pleine, redemption ignorée:', redemption.reward_title);
+                console.warn('File pleine, alerte ignorée:', item.event.kind);
                 return;
             }
-            pending.push(redemption);
+            pending.push(item);
             drainQueue();
         }
 
-        // Une seule animation à l'écran : les échanges simultanés s'enchaînent.
+        // Une seule animation à l'écran : les événements simultanés s'enchaînent.
         async function drainQueue() {
             if (isPlaying) return;
             isPlaying = true;
             try {
                 while (pending.length > 0) {
-                    const redemption = pending.shift();
-                    const reward = await resolveReward(redemption.reward_title);
-                    if (!reward) {
-                        console.warn('Aucune récompense configurée pour:', redemption.reward_title);
-                        continue;
-                    }
-                    await playRedemption(reward, redemption);
+                    const { config, event } = pending.shift();
+                    await playRedemption(config, event);
                 }
             } finally {
                 isPlaying = false;
@@ -217,26 +179,40 @@
 
         // Substitue les jetons de la phrase configurée. Les accolades sont échappées
         // dans les regex pour ne pas être interprétées comme des balises Askama.
-        function formatPhrase(phrase, redemption) {
+        //
+        // `amount` et `tier` désignent le même champ : selon le type d'alerte il porte
+        // des bits, un nombre d'abonnements offerts, de spectateurs ou un palier
+        // d'abonnement, et deux noms rendent les phrases lisibles des deux côtés.
+        function formatPhrase(phrase, event) {
             return String(phrase || '')
-                .replace(/\{\{\s*user\s*\}\}/gi, () => redemption.user_name || '')
-                .replace(/\{\{\s*reward\s*\}\}/gi, () => redemption.reward_title || '')
-                .replace(/\{\{\s*input\s*\}\}/gi, () => redemption.user_input || '');
+                .replace(/\{\{\s*user\s*\}\}/gi, () => event.user_name || '')
+                .replace(/\{\{\s*reward\s*\}\}/gi, () => event.reward_title || '')
+                .replace(/\{\{\s*input\s*\}\}/gi, () => event.user_input || '')
+                .replace(/\{\{\s*amount\s*\}\}/gi, () => String(event.amount ?? ''))
+                .replace(/\{\{\s*tier\s*\}\}/gi, () => formatTier(event.amount))
+                .replace(/\{\{\s*months\s*\}\}/gi, () => String(event.months ?? ''));
         }
 
-        function buildWrapper(reward, redemption) {
+        // Twitch compte les paliers en 1000 / 2000 / 3000 : personne n'écrit
+        // « abonné tier 3000 » dans une alerte.
+        function formatTier(amount) {
+            const tier = Math.floor(Number(amount || 0) / 1000);
+            return tier > 0 ? String(tier) : '1';
+        }
+
+        function buildWrapper(config, event) {
             const wrapper = document.createElement('div');
             wrapper.className = 'reward-wrapper';
 
-            if (reward.imagePath && reward.imagePath.trim() !== '') {
+            if (config.imagePath && config.imagePath.trim() !== '') {
                 const image = document.createElement('img');
                 image.className = 'reward-image';
-                image.src = reward.imagePath;
+                image.src = config.imagePath;
                 image.alt = '';
                 wrapper.appendChild(image);
             }
 
-            const phrase = formatPhrase(reward.phrase, redemption).trim();
+            const phrase = formatPhrase(config.phrase, event).trim();
             if (phrase) {
                 const paragraph = document.createElement('p');
                 paragraph.className = 'reward-text';
@@ -333,17 +309,17 @@
             });
         }
 
-        async function playRedemption(reward, redemption) {
+        async function playRedemption(config, event) {
             const overlay = document.getElementById('cpOverlay');
-            const transition = reward.transition || 'fade';
-            const wrapper = buildWrapper(reward, redemption);
+            const transition = config.transition || 'fade';
+            const wrapper = buildWrapper(config, event);
 
             overlay.appendChild(wrapper);
             requestAnimationFrame(() => {
                 wrapper.className = 'reward-wrapper ' + getTransitionClasses(transition, true);
             });
 
-            await holdForSound(reward.soundPath);
+            await holdForSound(config.soundPath);
 
             wrapper.classList.remove(getTransitionClasses(transition, true));
             wrapper.classList.add(getTransitionClasses(transition, false));
@@ -362,42 +338,63 @@
             try {
                 ws = new WebSocket(proto + '://' + location.host + '/api/channel_point_ws');
             } catch (error) {
-                refreshRewards();
+                // Même délai que la fermeture normale : une source OBS ouverte avant
+                // le serveur doit finir par se rattacher toute seule.
+                console.error('Channel point WS error:', error);
+                setTimeout(connectWs, 2000);
                 return;
             }
 
-            ws.addEventListener('message', (event) => {
+            ws.addEventListener('message', (message) => {
                 let data;
                 try {
-                    data = JSON.parse(event.data);
+                    data = JSON.parse(message.data);
                 } catch (error) {
                     console.error('Channel point WS parse error:', error);
                     return;
                 }
 
-                if (data.type === 'rewards') {
-                    rewardsDelivered = true;
-                    applyRewardsMap(data.rewards);
-                } else if (data.type === 'redemption') {
-                    enqueue(data.redemption);
+                if (data.type === 'alert') {
+                    enqueue({ event: data.event, config: data.config });
                 }
             });
 
             ws.addEventListener('close', () => {
-                if (!rewardsDelivered) {
-                    refreshRewards();
-                }
                 setTimeout(connectWs, 2000);
             });
         }
 
-        // Déclenche une animation sans passer par Twitch :
-        // testRedemption('Un cookie ?!', 'LordRutra')
-        window.testRedemption = function (title, user, input) {
+        // Déclenche une animation sans passer par Twitch. La configuration est fournie
+        // à la main : la sélection d'une ligne selon le type et le palier se fait côté
+        // serveur, ce hook ne peut donc exercer que l'affichage et la file d'attente.
+        //
+        //   testAlert('Merci \{\{user\}\} pour \{\{amount\}\} bits !', { kind: 'cheer', amount: 500 })
+        //
+        // Les accolades sont échappées jusque dans ce commentaire : Askama compile ce
+        // fichier et prendrait une paire nue pour une variable de template. En
+        // JavaScript `\{` vaut `{`, la phrase reste donc correcte à l'exécution.
+        window.testAlert = function (phrase, event, config) {
             enqueue({
-                reward_title: title,
-                user_name: user || 'TestUser',
-                user_input: input || ''
+                event: Object.assign(
+                    {
+                        kind: 'channel_points',
+                        reward_title: 'Test',
+                        user_name: 'TestUser',
+                        user_input: '',
+                        amount: 0,
+                        months: 0
+                    },
+                    event || {}
+                ),
+                config: Object.assign(
+                    {
+                        phrase: phrase || 'Test \{\{user\}\}',
+                        imagePath: '',
+                        soundPath: '',
+                        transition: 'fade'
+                    },
+                    config || {}
+                )
             });
         };
 

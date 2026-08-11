@@ -10,15 +10,28 @@
 //! affichée s'en déduit. Rien n'est réécrit tant que personne ne touche un bouton,
 //! et l'afficheur peut extrapoler avec sa propre horloge entre deux messages.
 
+use crate::models::channel_point::AlertKind;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const TIMER_PATH: &str = "data/timer.json";
 
-/// Plafond de durée : 24 h. Borne les saisies du configurateur comme les `+1 min`
+/// Plafond de durée : 7 jours. Borne les saisies du configurateur comme les `+1 min`
 /// répétés, pour qu'un doigt qui reste appuyé ne produise pas un compteur absurde.
-pub const MAX_MS: u64 = 24 * 60 * 60 * 1000;
+///
+/// Sept jours et non vingt-quatre heures : un subathon dépasse régulièrement la
+/// journée, et le temps gagné au-delà du plafond serait perdu sans que personne ne
+/// soit averti. L'affichage suit déjà (`timer.html` calcule les heures sans borne).
+pub const MAX_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+
+/// Sérialise les écritures de `data/timer.json` **de ce processus**.
+///
+/// Sans lui, deux ajouts de temps concurrents — un abonnement reçu par la tâche
+/// subathon et un `+1 min` cliqué dans le configurateur — lisent la même valeur et
+/// le second écrasé le premier. Voir `update`.
+static WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 /// Horloge murale en millisecondes.
 ///
@@ -29,6 +42,73 @@ pub fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// Conversion « événement Twitch reçu » → « temps ajouté au compte à rebours ».
+///
+/// Le temps par abonnement est **plat**, indépendant du palier : `amount` porte bien
+/// le tier, donc un multiplicateur par palier pourra s'ajouter plus tard sans
+/// changer le format du fichier.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Subathon {
+    /// À `false` (défaut), aucun événement ne touche au compte à rebours.
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(rename = "msPerSub", default = "default_ms_per_sub")]
+    pub ms_per_sub: u64,
+    /// Par abonnement offert : un don de 5 subs ajoute cinq fois cette valeur.
+    #[serde(rename = "msPerGiftSub", default = "default_ms_per_sub")]
+    pub ms_per_gift_sub: u64,
+    /// Proratisé : 50 bits ajoutent la moitié de cette valeur.
+    #[serde(rename = "msPer100Bits", default = "default_ms_per_100_bits")]
+    pub ms_per_100_bits: u64,
+    /// Par spectateur amené par un raid. À 0 (défaut), les raids n'ajoutent rien —
+    /// un gros raid ferait sinon exploser le compteur.
+    #[serde(rename = "msPerRaider", default)]
+    pub ms_per_raider: u64,
+}
+
+fn default_ms_per_sub() -> u64 {
+    5 * 60 * 1000
+}
+fn default_ms_per_100_bits() -> u64 {
+    60 * 1000
+}
+
+impl Default for Subathon {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            ms_per_sub: default_ms_per_sub(),
+            ms_per_gift_sub: default_ms_per_sub(),
+            ms_per_100_bits: default_ms_per_100_bits(),
+            ms_per_raider: 0,
+        }
+    }
+}
+
+impl Subathon {
+    /// Millisecondes à ajouter pour un événement. `0` = rien à faire.
+    ///
+    /// Les points de chaîne sont volontairement absents : ils ont déjà leur propre
+    /// coût en points, les faire aussi rallonger le stream serait un double compte.
+    pub fn bonus_ms(&self, kind: AlertKind, amount: u64) -> u64 {
+        if !self.enabled {
+            return 0;
+        }
+        match kind {
+            // Prime compris : il coûte au diffuseur ce que coûte un tier 1, et le
+            // séparer imposerait un réglage de plus pour la même valeur par défaut.
+            AlertKind::Sub | AlertKind::Resub | AlertKind::Prime => self.ms_per_sub,
+            // `amount` est le nombre de subs offerts d'un coup.
+            AlertKind::Gift => self.ms_per_gift_sub.saturating_mul(amount),
+            // Proratisé au bit près, en multipliant avant de diviser pour ne pas
+            // perdre les petits cheers dans un arrondi.
+            AlertKind::Cheer => self.ms_per_100_bits.saturating_mul(amount) / 100,
+            AlertKind::Raid => self.ms_per_raider.saturating_mul(amount),
+            AlertKind::ChannelPoints => 0,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -60,6 +140,9 @@ pub struct Timer {
     /// Vide = couleur d'accent du thème global.
     #[serde(rename = "accentColor", default)]
     pub accent_color: String,
+    /// Bloc absent d'un fichier existant : subathon désactivé, rien ne change.
+    #[serde(default)]
+    pub subathon: Subathon,
 }
 
 fn default_title() -> String {
@@ -87,6 +170,7 @@ impl Default for Timer {
             hide_when_zero: false,
             show_progress: true,
             accent_color: String::new(),
+            subathon: Subathon::default(),
         }
     }
 }
@@ -107,6 +191,8 @@ pub struct TimerSettings {
     pub show_progress: bool,
     #[serde(rename = "accentColor", default)]
     pub accent_color: String,
+    #[serde(default)]
+    pub subathon: Subathon,
 }
 
 impl Timer {
@@ -194,32 +280,71 @@ impl Timer {
         self.hide_when_zero = settings.hide_when_zero;
         self.show_progress = settings.show_progress;
         self.accent_color = settings.accent_color;
+        self.subathon = settings.subathon;
         if !self.running {
             self.remaining_ms = self.duration_ms;
         }
     }
 }
 
-/// Lit `data/timer.json`. Un fichier absent crée la configuration par défaut plutôt
-/// que de remonter une erreur : l'overlay doit toujours pouvoir s'afficher.
-pub fn read() -> Result<Timer, String> {
+/// Lit `data/timer.json`. Un fichier absent vaut la configuration par défaut plutôt
+/// qu'une erreur : l'overlay doit toujours pouvoir s'afficher.
+///
+/// Ne prend pas le verrou : un lecteur n'a rien à sérialiser, et l'écriture atomique
+/// de `write_unlocked` garantit qu'il ne verra jamais un fichier à moitié écrit.
+fn read_unlocked() -> Result<Timer, String> {
     let content = match fs::read_to_string(TIMER_PATH) {
         Ok(c) => c,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            let default = Timer::default();
-            write(&default)?;
-            return Ok(default);
-        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Timer::default()),
         Err(e) => return Err(format!("Error reading timer.json: {e}")),
     };
 
     serde_json::from_str(&content).map_err(|e| format!("Error parsing timer.json: {e}"))
 }
 
-pub fn write(timer: &Timer) -> Result<(), String> {
+/// Écrit par fichier temporaire puis `rename`.
+///
+/// `fs::write` tronque avant d'écrire : un tick de `/api/timer_ws` tombant dans cette
+/// fenêtre lisait un JSON invalide, et `timer_controller::current()` l'avalait en
+/// `Timer::default()` — soit un overlay qui repart à « Retour dans 5:00 » tout seul,
+/// en plein direct. Chaque client relit le fichier chaque seconde, la fenêtre n'est
+/// pas étroite.
+fn write_unlocked(timer: &Timer) -> Result<(), String> {
     let json = serde_json::to_string_pretty(timer).map_err(|e| format!("Error serializing: {e}"))?;
     fs::create_dir_all("data").map_err(|e| format!("Error creating data dir: {e}"))?;
-    fs::write(TIMER_PATH, json).map_err(|e| format!("Error writing timer.json: {e}"))
+
+    let tmp = format!("{TIMER_PATH}.tmp");
+    fs::write(&tmp, json).map_err(|e| format!("Error writing timer.json: {e}"))?;
+    fs::rename(&tmp, TIMER_PATH).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("Error replacing timer.json: {e}")
+    })
+}
+
+pub fn read() -> Result<Timer, String> {
+    read_unlocked()
+}
+
+/// Lit, modifie et réécrit en un seul geste sérialisé.
+///
+/// Seule porte d'écriture, volontairement : il n'existe pas de `write` public, sinon
+/// un appelant pourrait persister un état lu hors du verrou et perdre l'ajout d'un
+/// autre écrivain.
+///
+/// La lecture est **dans** le verrou : deux ajouts de temps simultanés — un
+/// abonnement encaissé par la tâche subathon et un `+1 min` cliqué dans le
+/// configurateur — doivent s'additionner, pas s'écraser. Actix sert les requêtes sur
+/// plusieurs threads, la course est réelle et pas théorique.
+///
+/// `read_unlocked` / `write_unlocked` sont appelés directement : passer par les
+/// versions publiques reprendrait le verrou, et `std::sync::Mutex` n'est pas
+/// réentrant — ce serait un interblocage.
+pub fn update(change: impl FnOnce(&mut Timer, u64)) -> Result<Timer, String> {
+    let _guard = WRITE_LOCK.lock().unwrap();
+    let mut timer = read_unlocked()?;
+    change(&mut timer, now_ms());
+    write_unlocked(&timer)?;
+    Ok(timer)
 }
 
 #[cfg(test)]
@@ -333,9 +458,11 @@ mod tests {
     #[test]
     fn ajouter_du_temps_est_plafonne() {
         let mut t = timer();
-        // Cinquante « +1 h » d'affilée ne doivent pas dépasser le plafond.
-        for _ in 0..50 {
-            t.adjust_at(T0, 3_600_000);
+        // Assez de « +1 h » pour dépasser le plafond quelle que soit sa valeur : un
+        // nombre d'itérations en dur casserait ce test au prochain relèvement.
+        const HOUR: u64 = 3_600_000;
+        for _ in 0..(MAX_MS / HOUR + 5) {
+            t.adjust_at(T0, HOUR as i64);
         }
         assert_eq!(t.remaining_ms, MAX_MS);
     }
@@ -362,6 +489,7 @@ mod tests {
             hide_when_zero: true,
             show_progress: true,
             accent_color: String::new(),
+            subathon: Subathon::default(),
         });
         assert_eq!(t.title, "Pause");
         assert_eq!(t.duration_ms, 20 * MIN);
@@ -376,12 +504,13 @@ mod tests {
         let mut t = timer();
         t.apply_settings(TimerSettings {
             title: default_title(),
-            // Au-delà du plafond : ramené à 24 h.
+            // Au-delà du plafond : ramené à MAX_MS.
             duration_ms: MAX_MS * 3,
             end_text: default_end_text(),
             hide_when_zero: false,
             show_progress: true,
             accent_color: "#ff0000".to_string(),
+            subathon: Subathon::default(),
         });
         assert_eq!(t.duration_ms, MAX_MS);
         assert_eq!(t.remaining_ms, MAX_MS);
@@ -402,6 +531,7 @@ mod tests {
             hide_when_zero: false,
             show_progress: false,
             accent_color: String::new(),
+            subathon: Subathon::default(),
         });
         assert!(!t.show_progress);
 
@@ -427,5 +557,120 @@ mod tests {
         // `now` antérieur à l'ancre : l'écart sature à 0, la valeur reste la durée
         // pleine au lieu de dépasser par le haut.
         assert_eq!(t.remaining_at(T0 - 10 * MIN), 5 * MIN);
+    }
+
+    // ── Subathon ────────────────────────────────────────────────────────────────
+
+    /// Le plafond doit laisser passer un subathon réel : à 24 h, le temps gagné
+    /// au-delà était silencieusement perdu.
+    #[test]
+    fn le_plafond_couvre_une_semaine() {
+        assert_eq!(MAX_MS, 7 * 24 * 3_600_000);
+    }
+
+    #[test]
+    fn un_fichier_sans_bloc_subathon_se_relit() {
+        // Rétro-compatibilité : un timer.json écrit avant cette version doit
+        // continuer de se lire, subathon éteint.
+        let t: Timer = serde_json::from_str("{}").unwrap();
+        assert!(!t.subathon.enabled);
+        assert_eq!(t.subathon.ms_per_sub, 5 * MIN);
+        assert_eq!(t.subathon.ms_per_raider, 0);
+    }
+
+    #[test]
+    fn roundtrip_conserve_les_noms_du_subathon() {
+        let json = serde_json::to_string(&timer()).unwrap();
+        assert!(json.contains("\"msPerSub\""), "{json}");
+        assert!(json.contains("\"msPer100Bits\""), "{json}");
+        assert!(json.contains("\"msPerRaider\""), "{json}");
+    }
+
+    fn subathon() -> Subathon {
+        Subathon {
+            enabled: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn desactive_aucun_evenement_n_ajoute_de_temps() {
+        // Le garde-fou est dans `bonus_ms` et pas seulement dans l'appelant : c'est
+        // ce qui garantit qu'activer la fonctionnalité reste un acte explicite.
+        let s = Subathon::default();
+        assert!(!s.enabled);
+        assert_eq!(s.bonus_ms(AlertKind::Sub, 1000), 0);
+        assert_eq!(s.bonus_ms(AlertKind::Cheer, 10_000), 0);
+    }
+
+    #[test]
+    fn un_abonnement_ajoute_le_meme_temps_quel_que_soit_le_palier() {
+        // Choix assumé : `amount` porte le tier, un multiplicateur par palier
+        // pourra s'ajouter plus tard sans changer le format du fichier.
+        let s = subathon();
+        assert_eq!(s.bonus_ms(AlertKind::Sub, 1000), 5 * MIN);
+        assert_eq!(s.bonus_ms(AlertKind::Sub, 3000), 5 * MIN);
+        assert_eq!(s.bonus_ms(AlertKind::Resub, 2000), 5 * MIN);
+    }
+
+    #[test]
+    fn un_abonnement_prime_credite_comme_un_abonnement() {
+        // Régression à éviter : avant d'avoir son propre type, un Prime arrivait en
+        // `Sub` et créditait déjà ce temps. L'oublier ici l'aurait fait disparaître
+        // du subathon sans le moindre message.
+        let s = subathon();
+        assert_eq!(s.bonus_ms(AlertKind::Prime, 1000), 5 * MIN);
+    }
+
+    #[test]
+    fn les_subs_offerts_comptent_un_par_un() {
+        let s = subathon();
+        assert_eq!(s.bonus_ms(AlertKind::Gift, 5), 25 * MIN);
+    }
+
+    #[test]
+    fn les_bits_sont_proratises() {
+        // 100 bits = la valeur pleine, 50 bits = la moitié. La multiplication
+        // précède la division pour qu'un petit cheer ne disparaisse pas.
+        let s = subathon();
+        assert_eq!(s.bonus_ms(AlertKind::Cheer, 100), MIN);
+        assert_eq!(s.bonus_ms(AlertKind::Cheer, 50), MIN / 2);
+        assert_eq!(s.bonus_ms(AlertKind::Cheer, 1), 600);
+    }
+
+    #[test]
+    fn un_raid_n_ajoute_rien_par_defaut() {
+        // Un raid de 3 000 spectateurs ferait exploser le compteur : le réglage
+        // part de zéro et c'est au streamer de l'ouvrir.
+        assert_eq!(subathon().bonus_ms(AlertKind::Raid, 3000), 0);
+
+        let s = Subathon {
+            enabled: true,
+            ms_per_raider: 1000,
+            ..Default::default()
+        };
+        assert_eq!(s.bonus_ms(AlertKind::Raid, 42), 42_000);
+    }
+
+    #[test]
+    fn les_points_de_chaine_ne_rallongent_pas_le_stream() {
+        // Ils ont déjà leur coût en points : les compter ici serait un double compte.
+        assert_eq!(subathon().bonus_ms(AlertKind::ChannelPoints, 0), 0);
+    }
+
+    #[test]
+    fn un_afflux_d_evenements_ne_deborde_pas() {
+        // `saturating_mul` plutôt qu'un `*` nu : un `amount` aberrant venu de
+        // l'API ne doit pas provoquer un panic en release ni un temps négatif.
+        let s = Subathon {
+            enabled: true,
+            ms_per_gift_sub: u64::MAX / 2,
+            ..Default::default()
+        };
+        let bonus = s.bonus_ms(AlertKind::Gift, 1000);
+        // La valeur sature, et `adjust_at` la ramène ensuite sous le plafond.
+        let mut t = timer();
+        t.adjust_at(T0, bonus.min(i64::MAX as u64) as i64);
+        assert_eq!(t.remaining_ms, MAX_MS);
     }
 }

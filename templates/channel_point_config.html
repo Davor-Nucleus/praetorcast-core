@@ -255,6 +255,16 @@
             border-color: var(--accent-glow);
         }
 
+        /* Explication sous un champ : plus discrète que le libellé, qu'elle ne doit
+           pas concurrencer. */
+        .field-hint {
+            display: block;
+            margin-top: 0.35rem;
+            font-size: 0.7rem;
+            line-height: 1.35;
+            color: var(--text-muted);
+        }
+
         .controls-right {
             display: flex;
             flex-direction: column;
@@ -322,6 +332,29 @@
             { value: 'flip', label: 'Retournement' }
         ];
 
+        // `value` doit correspondre au `snake_case` de `models::channel_point::AlertKind`.
+        // `amount` nomme ce que porte le palier pour ce type ; vide = pas de palier.
+        const KINDS = [
+            { value: 'channel_points', label: 'Points de chaîne', amount: '' },
+            { value: 'sub', label: 'Abonnement', amount: 'Palier minimum (1000, 2000, 3000)' },
+            { value: 'resub', label: 'Réabonnement', amount: 'Palier minimum (1000, 2000, 3000)' },
+            { value: 'gift', label: 'Abonnements offerts', amount: 'Nombre minimum offert' },
+            { value: 'cheer', label: 'Bits', amount: 'Bits minimum' },
+            { value: 'raid', label: 'Raid', amount: 'Spectateurs minimum' },
+            // Pas de palier : un Prime est toujours au tier 1, et le nombre de mois
+            // n'entre pas dans la sélection. `amount: ''` marque ce cas, comme pour
+            // les points de chaîne.
+            { value: 'prime', label: 'Abonnement Prime', amount: '' }
+        ];
+
+        function kindOf(reward) {
+            return reward.kind || 'channel_points';
+        }
+
+        function kindMeta(value) {
+            return KINDS.find((k) => k.value === value) || KINDS[0];
+        }
+
         let rewards = [];
 
         async function loadConfig() {
@@ -343,19 +376,40 @@
             cardList.innerHTML = '';
 
             rewards.forEach((reward, index) => {
+                const kind = kindOf(reward);
+                const meta = kindMeta(kind);
                 const cardItem = document.createElement('div');
                 cardItem.className = 'card-item';
                 cardItem.innerHTML = `
                     <div style="flex:1; display:flex; flex-direction:column; gap:var(--spacing-md);">
-                        <div class="reward-header">
-                            <input type="text" value="${escapeHtml(reward.reward_title || '')}" placeholder="Nom de la récompense Twitch (exact)" class="reward-title-input" onchange="updateRewardTitle(${index}, this.value)" />
+                        <div class="text-input-group">
+                            <label for="kind-${index}">Déclencheur</label>
+                            <select id="kind-${index}" onchange="updateKind(${index}, this.value)">
+                                ${renderKindOptions(kind)}
+                            </select>
                         </div>
+
+                        ${kind === 'channel_points' ? `
+                            <div class="reward-header">
+                                <input type="text" value="${escapeHtml(reward.reward_title || '')}" placeholder="Nom de la récompense Twitch (exact)" class="reward-title-input" onchange="updateRewardTitle(${index}, this.value)" />
+                            </div>
+                        ` : ''}
+                        ${!meta.amount ? '' : `
+                            <div class="text-input-group">
+                                <label for="minAmount-${index}">${meta.amount}</label>
+                                <input id="minAmount-${index}" type="number" min="0" step="1" value="${Number(reward.minAmount || 0)}" onchange="updateMinAmount(${index}, this.value)" />
+                                <small class="field-hint">0 déclenche pour n'importe quel montant. Plusieurs lignes du même type forment des paliers : la plus élevée qui reste atteinte gagne.</small>
+                            </div>
+                        `}
+                        ${kind !== 'prime' ? '' : `
+                            <small class="field-hint">Couvre le premier abonnement Prime et son renouvellement. Sans cette ligne, un Prime joue « Abonnement » ou « Réabonnement ».</small>
+                        `}
 
                         <div class="media-section">
                             <div class="media-block">
                                 <div class="media-block-title">Image / GIF</div>
                                 <div class="preview-container" id="imagePreview-${index}">
-                                    ${reward.imagePath ? `<img src="${reward.imagePath}" alt="Preview" class="preview-image" />` : '<span class="no-media-placeholder">Aucune image</span>'}
+                                    ${reward.imagePath ? `<img src="${escapeHtml(reward.imagePath)}" alt="Preview" class="preview-image" />` : '<span class="no-media-placeholder">Aucune image</span>'}
                                     <div class="upload-overlay">
                                         <label class="upload-label">
                                             ${reward.imagePath ? 'Changer' : 'Uploader'}
@@ -370,7 +424,7 @@
                                 <div class="preview-container" id="soundPreview-${index}">
                                     ${reward.soundPath ? `
                                         <div class="sound-preview">
-                                            <span class="sound-name">${reward.soundPath.split('/').pop()}</span>
+                                            <span class="sound-name">${escapeHtml(reward.soundPath.split('/').pop())}</span>
                                         </div>
                                     ` : '<span class="no-media-placeholder">Aucun son</span>'}
                                     <div class="upload-overlay">
@@ -392,6 +446,7 @@
                         <div class="text-input-group">
                             <label for="phrase-${index}">Phrase à afficher (optionnel)</label>
                             <input id="phrase-${index}" type="text" value="${escapeHtml(reward.phrase || '')}" placeholder="Merci \{\{user\}\} pour le \{\{reward\}\} !" onchange="updatePhrase(${index}, this.value)" />
+                            <small class="field-hint">Jetons : \{\{user\}\}, \{\{amount\}\}, \{\{tier\}\}, \{\{months\}\}, \{\{input\}\}, \{\{reward\}\}</small>
                         </div>
 
                         <div class="text-input-group">
@@ -425,9 +480,17 @@
                 .join('');
         }
 
+        function renderKindOptions(current) {
+            return KINDS
+                .map((k) => `<option value="${k.value}" ${k.value === current ? 'selected' : ''}>${k.label}</option>`)
+                .join('');
+        }
+
         function addCard() {
             rewards.push({
+                kind: 'channel_points',
                 reward_title: '',
+                minAmount: 0,
                 phrase: '',
                 imagePath: '',
                 soundPath: '',
@@ -443,6 +506,21 @@
 
         function updateRewardTitle(index, value) {
             rewards[index].reward_title = value;
+        }
+
+        // Changer de déclencheur remplace le champ affiché (titre exact ↔ palier) :
+        // il faut redessiner la carte, contrairement aux autres champs.
+        function updateKind(index, value) {
+            rewards[index].kind = value;
+            renderCards();
+        }
+
+        function updateMinAmount(index, value) {
+            // `Math.max(0, …)` plutôt que la seule contrainte `min="0"` du champ : une
+            // valeur négative ou vide saisie au clavier arriverait sinon en NaN, et le
+            // serveur attend un entier non signé.
+            const amount = Math.max(0, Math.floor(Number(value) || 0));
+            rewards[index].minAmount = amount;
         }
 
         function updatePhrase(index, value) {

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Texte</title>
+    <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            /* Fond transparent, contrairement à /banner qui est plein écran sur
+               noir : cette page est une incrustation posée par-dessus un
+               gameplay. Une section peut repeindre le sien via `backgroundColor`. */
+            background: transparent;
+            color: var(--pc-text);
+            font-family: var(--pc-font);
+            overflow: hidden;
+        }
+
+        #textStage {
+            position: fixed;
+            inset: 0;
+        }
+
+        /* Repris de banner.html. Volontairement visible : une source muette est
+           indiscernable d'une source cassée, mieux vaut lire pourquoi. */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            padding: 2rem;
+            text-align: center;
+            color: var(--pc-text-muted);
+            font-family: monospace;
+            font-size: 1.15rem;
+        }
+
+        .empty-state.hide { display: none; }
+        .empty-hint { font-size: 0.95rem; opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div id="textStage"></div>
+
+    <div class="empty-state" id="emptyState">
+        <p id="emptyTitle">Chargement…</p>
+        <p class="empty-hint" id="emptyHint"></p>
+    </div>
+
+    {% include "partials/_text_render.html" %}
+
+    <script>
+        // La section affichée est désignée par l'URL — une source OBS par section.
+        // Le serveur ne filtre pas : il pousse toute la configuration et c'est ici
+        // qu'on retrouve la sienne, à chaque envoi (une section renommée doit
+        // pouvoir faire basculer la page sur son état « section inconnue »).
+        const wanted = (new URLSearchParams(location.search).get('name') || '').trim().toLowerCase();
+
+        const stage = document.getElementById('textStage');
+        const emptyState = document.getElementById('emptyState');
+        const emptyTitle = document.getElementById('emptyTitle');
+        const emptyHint = document.getElementById('emptyHint');
+
+        const renderer = createTextRenderer(stage);
+
+        let sections = [];
+        let wsDeliveredOnce = false;
+
+        function findSection() {
+            if (!wanted) return null;
+            return sections.find((s) => String(s.name || '').toLowerCase() === wanted) || null;
+        }
+
+        function showEmpty(title, hint) {
+            renderer.clear();
+            // textContent : les noms de section viennent d'une saisie libre.
+            emptyTitle.textContent = title;
+            emptyHint.textContent = hint || '';
+            emptyState.classList.remove('hide');
+        }
+
+        function applyAll() {
+            const section = findSection();
+
+            if (section) {
+                emptyState.classList.add('hide');
+                renderer.render(section);
+                return;
+            }
+
+            const names = sections.map((s) => s.name).filter(Boolean);
+            const available = names.length
+                ? 'Sections disponibles : ' + names.join(', ')
+                : 'Aucune section définie. Créez-en une dans /text-config.';
+
+            if (!wanted) {
+                showEmpty('Ajoutez ?name=… à l\'URL.', available);
+            } else {
+                showEmpty('Aucune section nommée « ' + wanted +' ».', available);
+            }
+        }
+
+        function applyTextConfig(payload) {
+            const source = payload && typeof payload === 'object' ? payload : {};
+            sections = Array.isArray(source.sections) ? source.sections : [];
+        }
+
+        // Même schéma que banner.html : le WebSocket est la source normale, le
+        // fetch ne sert que s'il n'a jamais rien livré.
+        function connectWs() {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            let ws;
+            try {
+                ws = new WebSocket(`${proto}://${location.host}/api/text_ws`);
+            } catch (error) {
+                loadConfigFallback();
+                return;
+            }
+
+            ws.addEventListener('message', (event) => {
+                wsDeliveredOnce = true;
+                try {
+                    applyTextConfig(JSON.parse(event.data));
+                    applyAll();
+                } catch (error) {
+                    console.error('Text WS parse error:', error);
+                }
+            });
+
+            ws.addEventListener('close', () => {
+                if (!wsDeliveredOnce) {
+                    loadConfigFallback();
+                }
+                setTimeout(connectWs, 2000);
+            });
+        }
+
+        async function loadConfigFallback() {
+            try {
+                const response = await fetch('/api/text-config');
+                applyTextConfig(response.ok ? await response.json() : null);
+            } catch (error) {
+                applyTextConfig(null);
+            }
+            applyAll();
+        }
+
+        window.addEventListener('load', () => {
+            connectWs();
+        });
+    </script>
+</body>
+</html>

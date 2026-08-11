@@ -21,6 +21,26 @@ function parseTags(rawTags) {
     return tags;
 }
 
+/// Tags d'une ligne IRC : de l'`@` jusqu'à la première espace.
+///
+/// Twitch échappe les espaces dans les valeurs de tags (`\s`), donc la première
+/// espace marque bien la fin du bloc.
+function tagsOf(line) {
+    if (!line.startsWith("@")) return {};
+    const end = line.indexOf(" ");
+    return end === -1 ? {} : parseTags(line.substring(0, end));
+}
+
+/// Paramètre final d'une ligne IRC : ce qui suit le « : » placé après la commande.
+///
+/// Pour un CLEARCHAT c'est le *login* de l'utilisateur visé, et son absence
+/// distingue un vidage complet du chat d'un timeout individuel.
+function trailingOf(line) {
+    const start = line.startsWith("@") ? line.indexOf(" ") + 1 : 0;
+    const colon = line.indexOf(" :", start);
+    return colon === -1 ? "" : line.substring(colon + 2);
+}
+
 /// Une couleur non conforme irait se poser telle quelle dans un attribut de style.
 function safeColor(value) {
     return COLOR_PATTERN.test(value || "") ? value : DEFAULT_TWITCH_COLOR;
@@ -141,25 +161,37 @@ function parseTwitchMessage(line) {
     const splitIdx = line.indexOf(" :");
     if (splitIdx === -1) return;
 
-    const tags = parseTags(line.substring(0, splitIdx));
+    const tags = tagsOf(line);
     const rest = line.substring(splitIdx + 2);
 
     const msgContentIdx = rest.indexOf("PRIVMSG");
     if (msgContentIdx === -1) return;
 
+    // Le préfixe `nick!nick@nick.tmi.twitch.tv` porte le *login*, seul identifiant que
+    // CLEARCHAT donne en clair. Le `display-name` ne peut pas le remplacer : pour un
+    // pseudo localisé (CJK, accents) les deux n'ont rien à voir.
+    const prefix = rest.substring(0, msgContentIdx);
+    const bang = prefix.indexOf("!");
+    const login = bang > 0 ? prefix.substring(0, bang) : "";
+
     const afterPrivMsg = rest.substring(msgContentIdx);
     const colonIdx = afterPrivMsg.indexOf(":");
     if (colonIdx === -1) return;
 
-    addTwitchMessage(tags, tags["display-name"] || "User", afterPrivMsg.substring(colonIdx + 1));
+    addTwitchMessage(tags, tags["display-name"] || "User", afterPrivMsg.substring(colonIdx + 1), login);
 }
 
-function addTwitchMessage(tags, username, rawMessage) {
+function addTwitchMessage(tags, username, rawMessage, login) {
     const id = crypto.randomUUID();
     addMessage({
         id,
         platform: "twitch",
         user: username,
+        // Identifiants Twitch conservés pour la modération : `msgId` est la cible d'un
+        // CLEARMSG, `userId` celle d'un CLEARCHAT. L'`id` local reste la clé du DOM.
+        msgId: tags["id"] || "",
+        userId: tags["user-id"] || "",
+        login: login || "",
         node: buildMessageElement(
             id,
             parseBadges(tags["badges"]),
@@ -169,6 +201,45 @@ function addTwitchMessage(tags, username, rawMessage) {
         ),
         timestamp: Date.now()
     });
+}
+
+// --- Modération ------------------------------------------------------------
+// Twitch pousse déjà CLEARMSG et CLEARCHAT sur cette socket anonyme : ils sont
+// couverts par le `twitch.tv/commands` du CAP REQ. Sans ces gestionnaires, un
+// message supprimé par un modérateur restait affiché à l'écran du stream.
+
+/// CLEARMSG — un message précis a été supprimé.
+///
+/// `@login=x;target-msg-id=<uuid> :tmi.twitch.tv CLEARMSG #chan :texte`
+function purgeMessage(line) {
+    const target = tagsOf(line)["target-msg-id"];
+    if (!target) return;
+    // Un identifiant qu'on n'a pas (message déjà expiré, ou reçu avant l'ouverture
+    // de l'overlay) est un non-événement, pas une erreur.
+    messages
+        .filter(msg => msg.platform === "twitch" && msg.msgId === target)
+        .forEach(msg => removeMessage(msg.id));
+}
+
+/// CLEARCHAT — timeout, bannissement, ou vidage complet du chat.
+///
+/// `@target-user-id=123 :tmi.twitch.tv CLEARCHAT #chan :login` cible un utilisateur ;
+/// sans paramètre final, c'est tout le chat qui est vidé.
+function purgeUser(line) {
+    const targetId = tagsOf(line)["target-user-id"];
+    const login = trailingOf(line);
+
+    messages
+        .filter(msg => {
+            // Un modérateur Twitch n'a pas autorité sur le chat YouTube, et un
+            // message YouTube ne porte de toute façon aucun de ces identifiants.
+            if (msg.platform !== "twitch") return false;
+            if (!targetId && !login) return true;
+            // `user-id` d'abord : c'est stable, là où un login peut être changé.
+            if (targetId && msg.userId) return msg.userId === targetId;
+            return login !== "" && msg.login === login;
+        })
+        .forEach(msg => removeMessage(msg.id));
 }
 
 /// JoyPixels : on convertit les raccourcis en caractères Unicode (texte) et non en
@@ -240,6 +311,29 @@ function renderMessages() {
     chat.replaceChildren(...messages.map(msg => msg.node));
 }
 
+/// Route une ligne IRC vers son gestionnaire.
+///
+/// Les commandes sont testées entourées d'espaces et `PRIVMSG` passe en premier : un
+/// message dont le *texte* contient « CLEARCHAT » doit s'afficher, pas vider le chat.
+function handleTwitchLine(line) {
+    if (!line) return;
+    if (line.startsWith("PING")) {
+        ws.send("PONG :tmi.twitch.tv");
+        return;
+    }
+    if (line.includes(" PRIVMSG ")) {
+        parseTwitchMessage(line);
+        return;
+    }
+    if (line.includes(" CLEARMSG ")) {
+        purgeMessage(line);
+        return;
+    }
+    if (line.includes(" CLEARCHAT ")) {
+        purgeUser(line);
+    }
+}
+
 async function connectTwitch() {
     const channel = TWITCH_CHANNEL_NAME;
     if (!channel) return;
@@ -260,14 +354,14 @@ async function connectTwitch() {
         pingInterval = setInterval(() => ws.send("PING"), 60000);
     };
 
+    // Une trame peut contenir plusieurs lignes : on découpe systématiquement, puis on
+    // route ligne par ligne. L'ancien filtre portait sur la trame entière et ne la
+    // découpait que si elle contenait « PRIVMSG » — une trame ne portant qu'un
+    // CLEARMSG n'était donc même pas examinée. Le PING est aussi traité par ligne :
+    // testé sur la trame, un simple « PING » tapé dans le chat faisait perdre tous
+    // les messages qui l'accompagnaient.
     ws.onmessage = (event) => {
-        const data = event.data;
-        if (data.includes("PING")) { ws.send("PONG :tmi.twitch.tv"); return; }
-        if (data.includes("PRIVMSG")) {
-            data.split("\r\n").forEach(line => {
-                if (line.includes("PRIVMSG")) parseTwitchMessage(line);
-            });
-        }
+        String(event.data).split("\r\n").forEach(handleTwitchLine);
     };
 
     ws.onclose = () => {

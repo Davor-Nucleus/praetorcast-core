@@ -11,10 +11,12 @@ use actix_ws::Message;
 use askama::Template;
 use futures_util::StreamExt;
 use serde::Deserialize;
-use tokio::sync::Notify;
+use std::sync::{Arc, Mutex};
+use tokio::sync::{broadcast, Notify};
 use tokio::time::{sleep, Duration};
 
 use crate::models::timer::{self, Timer, TimerSettings};
+use crate::twitch::TwitchState;
 
 /// Filet de sécurité du flux : un client qui n'était pas encore en attente au moment
 /// du clic rattrape l'état au tour suivant. La diffusion normale, elle, est immédiate.
@@ -69,16 +71,18 @@ fn snapshot(timer: &Timer) -> serde_json::Value {
         "hideWhenZero": timer.hide_when_zero,
         "showProgress": timer.show_progress,
         "accentColor": timer.accent_color,
+        "subathon": timer.subathon,
     })
 }
 
 /// Applique une mutation, la persiste, et réveille les afficheurs connectés.
+///
+/// Le trio lire-modifier-écrire est délégué à `timer::update`, qui le sérialise :
+/// depuis l'arrivée du subathon, une action de la page peut croiser un événement
+/// Twitch encaissé par la tâche de fond, et les deux ajouts doivent s'additionner.
 fn mutate(notify: &TimerNotify, change: impl FnOnce(&mut Timer, u64)) -> HttpResponse {
-    let mut timer = current();
-    change(&mut timer, timer::now_ms());
-
-    match timer::write(&timer) {
-        Ok(()) => {
+    match timer::update(change) {
+        Ok(timer) => {
             notify.0.notify_waiters();
             HttpResponse::Ok().json(snapshot(&timer))
         }
@@ -191,4 +195,56 @@ pub async fn timer_ws(
     });
 
     Ok(response)
+}
+
+/// Subathon : les événements Twitch rallongent le compte à rebours.
+///
+/// Tâche de fond et non gestionnaire de requête : la source est le canal d'alertes de
+/// la session EventSub, qui ne passe par aucune URL. Lancée depuis `main`, elle vit
+/// aussi longtemps que le processus.
+///
+/// Les réglages sont relus à chaque événement plutôt que capturés au démarrage :
+/// activer le subathon en plein direct doit prendre effet immédiatement, et le débit
+/// d'événements ne justifie aucun cache.
+pub async fn run_subathon(state: Arc<Mutex<TwitchState>>, notify: Arc<TimerNotify>) {
+    // Abonnement pris dans un bloc : le garde du `Mutex` doit être relâché avant le
+    // premier `.await`, sinon le futur n'est plus `Send`.
+    let mut alerts = { state.lock().unwrap().alerts.subscribe() };
+
+    loop {
+        let alert = match alerts.recv().await {
+            Ok(alert) => alert,
+            // Un afflux massif a débordé le tampon. Le temps correspondant est
+            // perdu ; mieux vaut le dire que de réécrire un total faux.
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                eprintln!("[Subathon] {n} événement(s) perdu(s) — temps non crédité");
+                continue;
+            }
+            // Le `Sender` vit dans `TwitchState`, lui-même gardé en vie par le
+            // serveur : ce cas n'arrive qu'à l'extinction du processus.
+            Err(broadcast::error::RecvError::Closed) => return,
+        };
+
+        let bonus = current().subathon.bonus_ms(alert.kind, alert.amount);
+        if bonus == 0 {
+            continue;
+        }
+
+        // `saturating` puis borné à `i64` : `adjust_at` prend un delta signé, et un
+        // `amount` aberrant venu de l'API ne doit pas déborder à la conversion.
+        let delta = bonus.min(i64::MAX as u64) as i64;
+        match timer::update(|timer, now| timer.adjust_at(now, delta)) {
+            Ok(timer) => {
+                notify.0.notify_waiters();
+                println!(
+                    "[Subathon] {:?} de {} : +{} s (restant {} s)",
+                    alert.kind,
+                    alert.user_name,
+                    bonus / 1000,
+                    timer.remaining_at(timer::now_ms()) / 1000
+                );
+            }
+            Err(e) => eprintln!("[Subathon] {e}"),
+        }
+    }
 }

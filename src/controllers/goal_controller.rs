@@ -70,6 +70,101 @@ pub async fn save(goals: web::Json<Vec<Goal>>) -> impl Responder {
     }
 }
 
+#[derive(serde::Deserialize)]
+pub struct AdjustQuery {
+    id: String,
+    /// Ajouté au compteur libre, négatif pour retirer.
+    delta: i64,
+}
+
+#[derive(serde::Deserialize)]
+pub struct SetQuery {
+    id: String,
+    value: u64,
+}
+
+/// Applique une mutation à l'objectif désigné.
+///
+/// Les paramètres passent par l'URL et les routes sont déclarées en GET **et** en
+/// POST, comme celles du compte à rebours : un bouton de Stream Deck ne sait faire
+/// qu'un GET.
+///
+/// Aucune notification à émettre : `goal_ws` relit le fichier chaque seconde, donc
+/// tout écrivain est répercuté en moins d'une seconde sans plomberie.
+fn mutate_manual(id: &str, change: impl FnOnce(&mut Goal)) -> HttpResponse {
+    // Réponse construite dans la fermeture, mais les erreurs doivent annuler
+    // l'écriture : `goal::update` ne persiste rien si `change` échoue.
+    let mut rejected = None;
+
+    let result = goal::update(|goals| {
+        let Some(target) = goals.iter_mut().find(|g| g.id.as_deref() == Some(id)) else {
+            return Err("introuvable".to_string());
+        };
+        // Le compteur libre est le seul champ que ces routes touchent ; sur une
+        // source relevée chez Twitch, l'écriture n'aurait aucun effet visible et
+        // répondre 200 laisserait croire le contraire.
+        if target.source != GoalSource::Manual {
+            rejected = Some(target.title.clone());
+            return Err("source non manuelle".to_string());
+        }
+        change(target);
+        Ok(())
+    });
+
+    match result {
+        Ok(goals) => {
+            let goal = goals.iter().find(|g| g.id.as_deref() == Some(id));
+            HttpResponse::Ok().json(serde_json::json!({
+                "success": true,
+                "manualCurrent": goal.map(|g| g.manual_current),
+                // La valeur affichée, ligne de base retranchée : c'est elle que le
+                // streamer voit à l'écran, et elle diffère du champ écrit.
+                "current": goal.and_then(|g| g.current_from(None)),
+            }))
+        }
+        Err(_) if rejected.is_some() => HttpResponse::Conflict().json(serde_json::json!({
+            "error": format!(
+                "L'objectif « {} » n'est pas en mode manuel : sa valeur vient de Twitch.",
+                rejected.unwrap_or_default()
+            )
+        })),
+        Err(e) if e == "introuvable" => {
+            // La liste des identifiants connus est renvoyée : c'est ce dont on a
+            // besoin pour câbler un bouton de Stream Deck, et sans elle un 404 sur
+            // un identifiant absent du fichier n'est pas diagnosticable.
+            let known: Vec<serde_json::Value> = goal::read()
+                .unwrap_or_default()
+                .iter()
+                .map(|g| serde_json::json!({"id": g.id, "title": g.title, "source": g.source}))
+                .collect();
+            HttpResponse::NotFound().json(serde_json::json!({
+                "error": format!("Aucun objectif d'identifiant « {id} »."),
+                "goals": known,
+            }))
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": "Failed to save goal config"}))
+        }
+    }
+}
+
+/// `/api/goal/adjust?id=<uuid>&delta=-5`
+pub async fn adjust(query: web::Query<AdjustQuery>) -> impl Responder {
+    let delta = query.delta;
+    mutate_manual(&query.id, |goal| goal.adjust_manual(delta))
+}
+
+/// `/api/goal/set?id=<uuid>&value=150`
+///
+/// Écrit `manualCurrent` **brut**, le même champ que `/goal-config` : avec une ligne
+/// de base non nulle, la barre affichera `value - baseline`.
+pub async fn set(query: web::Query<SetQuery>) -> impl Responder {
+    let value = query.value;
+    mutate_manual(&query.id, |goal| goal.manual_current = value)
+}
+
 /// Dernier relevé d'abonnés : `(instant, valeur ou message d'erreur)`.
 static SUBS_CACHE: Mutex<Option<(Instant, Result<u64, String>)>> = Mutex::new(None);
 

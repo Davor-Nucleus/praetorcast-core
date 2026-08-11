@@ -7,8 +7,8 @@ use std::sync::Mutex;
 use tokio::sync::broadcast;
 use tokio::time::{sleep, Duration};
 use crate::controllers::upload::{save_upload, AUDIO_EXTENSIONS, IMAGE_EXTENSIONS};
-use crate::models::channel_point::{self, ChannelPointReward};
-use crate::twitch::TwitchState;
+use crate::models::channel_point::{self, Alert};
+use crate::twitch::{AlertEvent, TwitchState};
 
 const CHANNELPOINT_DIR: &str = "public/channelpoint";
 const CHANNELPOINT_URL: &str = "/public/channelpoint";
@@ -27,12 +27,12 @@ pub async fn get() -> impl Responder {
         Ok(rewards) => HttpResponse::Ok().json(rewards),
         Err(e) => {
             eprintln!("{}", e);
-            HttpResponse::Ok().json(vec![] as Vec<ChannelPointReward>)
+            HttpResponse::Ok().json(vec![] as Vec<Alert>)
         }
     }
 }
 
-pub async fn save(rewards: web::Json<Vec<ChannelPointReward>>) -> impl Responder {
+pub async fn save(rewards: web::Json<Vec<Alert>>) -> impl Responder {
     match channel_point::write(rewards.into_inner()) {
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
         Err(e) => {
@@ -58,18 +58,12 @@ pub async fn redemption_ws(
 ) -> actix_web::Result<HttpResponse> {
     let (response, mut session, mut stream) = actix_ws::handle(&req, body)?;
     // Abonnement pris avant le spawn : le verrou ne traverse jamais un `.await`.
-    let mut redemptions = state.lock().unwrap().redemptions.subscribe();
+    let mut alerts = state.lock().unwrap().alerts.subscribe();
 
     // `MessageStream` n'est pas `Send` : on spawne sur le runtime local d'actix
     // plutôt que sur le pool tokio.
     actix_web::rt::spawn(async move {
-        // Envoyer la configuration des récompenses au client dès la connexion
-        let mut last_rewards = rewards_message();
-        if !last_rewards.is_empty() && session.text(last_rewards.clone()).await.is_err() {
-            return;
-        }
-
-        // Chaque overlay connecté reçoit une copie de chaque échange.
+        // Chaque overlay connecté reçoit une copie de chaque événement.
         loop {
             tokio::select! {
                 // Le flux entrant doit être consommé : sans ça la fermeture d'une
@@ -87,37 +81,27 @@ pub async fn redemption_ws(
                     Some(Err(_)) => return,
                     _ => {}
                 },
-                event = redemptions.recv() => {
-                    let redemption = match event {
-                        Ok(redemption) => redemption,
+                event = alerts.recv() => {
+                    let alert = match event {
+                        Ok(alert) => alert,
                         Err(broadcast::error::RecvError::Lagged(n)) => {
-                            println!("[WS] Overlay à la traîne, {n} redemption(s) ignorée(s)");
+                            println!("[WS] Overlay à la traîne, {n} alerte(s) ignorée(s)");
                             continue;
                         }
                         Err(broadcast::error::RecvError::Closed) => return,
                     };
 
-                    let msg = serde_json::json!({
-                        "type": "redemption",
-                        "redemption": redemption
-                    }).to_string();
-                    println!("[WS] Envoi redemption: {} par {}", redemption.reward_title, redemption.user_name);
+                    let Some(msg) = alert_message(&alert) else { continue };
+                    println!("[WS] Envoi alerte {:?} pour {}", alert.kind, alert.user_name);
                     if session.text(msg).await.is_err() {
                         println!("[WS] Connexion perdue, arrêt de la diffusion");
                         return;
                     }
                 }
-                // Relecture périodique du fichier : un « Save » dans le configurateur
-                // se reflète sans recharger la source OBS, comme pour la bannière.
-                _ = sleep(Duration::from_millis(1000)) => {
-                    let current = rewards_message();
-                    if !current.is_empty() && current != last_rewards {
-                        if session.text(current.clone()).await.is_err() {
-                            return;
-                        }
-                        last_rewards = current;
-                    }
-                }
+                // Le flux entrant doit rester consommé même sans événement : sans ce
+                // réveil régulier, un `select!` bloqué sur `recv()` ne remarquerait
+                // la fermeture d'une source OBS qu'au prochain événement.
+                _ = sleep(Duration::from_millis(1000)) => {}
             }
         }
     });
@@ -125,18 +109,31 @@ pub async fn redemption_ws(
     Ok(response)
 }
 
-/// Sérialise `channel_points.json` en message `rewards`, indexé par titre exact.
-/// Renvoie une chaîne vide si le fichier est illisible : mieux vaut conserver la
-/// configuration déjà envoyée que de vider l'overlay.
-fn rewards_message() -> String {
-    match channel_point::read() {
-        Ok(rewards) => {
-            let mut map = serde_json::Map::new();
-            for r in rewards {
-                map.insert(r.reward_title.clone(), serde_json::to_value(&r).unwrap_or_default());
-            }
-            serde_json::json!({"type": "rewards", "rewards": map}).to_string()
-        }
-        Err(_) => String::new(),
-    }
+/// Message WebSocket pour une alerte, ou `None` si rien n'est configuré pour elle.
+///
+/// La résolution se fait ici et pas dans l'overlay : `channel_point::select` est
+/// testable sans navigateur, et la version JS retéléchargeait la configuration à
+/// chaque titre inconnu — avec des `kind` sans ligne configurée, ç'aurait été une
+/// requête par événement.
+///
+/// Un fichier illisible ne fait rien passer plutôt que de jouer une alerte au
+/// hasard : l'événement est perdu, ce qui reste préférable à un faux positif.
+fn alert_message(alert: &AlertEvent) -> Option<String> {
+    let alerts = channel_point::read().ok()?;
+    let config = channel_point::select(
+        &alerts,
+        alert.kind,
+        &alert.reward_title,
+        alert.amount,
+        alert.months,
+    )?;
+
+    Some(
+        serde_json::json!({
+            "type": "alert",
+            "event": alert,
+            "config": config,
+        })
+        .to_string(),
+    )
 }

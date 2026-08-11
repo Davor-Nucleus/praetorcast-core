@@ -8,7 +8,7 @@ mod controllers;
 mod twitch;
 mod twitch_auth;
 
-use controllers::{auth_controller, banner_controller, channel_point_controller, display, goal_controller, music_controller, obs_controller, scheduler_controller, settings_controller, theme_controller, timer_controller, twitch_controller};
+use controllers::{auth_controller, banner_controller, channel_point_controller, display, goal_controller, music_controller, obs_controller, scheduler_controller, settings_controller, text_controller, theme_controller, timer_controller, twitch_controller};
 use models::config::load_config;
 
 #[actix_web::main]
@@ -33,6 +33,16 @@ async fn main() -> std::io::Result<()> {
     // lieu d'attendre le tour de boucle suivant.
     let timer_notify = web::Data::new(timer_controller::TimerNotify(Notify::new()));
 
+    // Subathon : les abonnements, bits et raids rallongent le compte à rebours. La
+    // tâche s'abonne au canal d'alertes de la session EventSub, donc elle a besoin
+    // d'un second accès à l'état Twitch — `bg_state` est déjà consommé ci-dessus.
+    // Inactif tant que le réglage n'est pas activé dans /timer-config.
+    let subathon_state = twitch_data.clone().into_inner();
+    let subathon_notify = timer_notify.clone().into_inner();
+    tokio::spawn(async move {
+        timer_controller::run_subathon(subathon_state, subathon_notify).await;
+    });
+
     println!("Serveur en cours d'exécution sur http://127.0.0.1:{}", port);
 
     HttpServer::new(move || {
@@ -46,6 +56,8 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::get().to(display::index))
             .route("/clock", web::get().to(display::clock))
             .route("/banner", web::get().to(display::banner))
+            // Une source OBS par section : /text?name=start, /text?name=brb…
+            .route("/text", web::get().to(display::text))
             .route("/music-current", web::get().to(display::music_current))
             .route("/emote-corner", web::get().to(display::emote_corner))
             .route("/discord-presence", web::get().to(display::discord_presence))
@@ -56,12 +68,17 @@ async fn main() -> std::io::Result<()> {
             // Pages de configuration
             .route("/music-config", web::get().to(music_controller::music_config))
             .route("/banner-config", web::get().to(banner_controller::page))
+            .route("/text-config", web::get().to(text_controller::page))
             .route("/scheduler", web::get().to(scheduler_controller::page))
             // API banner
             .route("/api/banner-config", web::get().to(banner_controller::get))
             .route("/api/banner-config", web::post().to(banner_controller::save))
             .route("/api/banner-upload", web::post().to(banner_controller::upload))
             .route("/api/banner_ws", web::get().to(banner_controller::banner_ws))
+            // API textes animés
+            .route("/api/text-config", web::get().to(text_controller::get))
+            .route("/api/text-config", web::post().to(text_controller::save))
+            .route("/api/text_ws", web::get().to(text_controller::text_ws))
             // API scheduler
             .route("/api/scheduler-config", web::get().to(scheduler_controller::get))
             .route("/api/scheduler-config", web::post().to(scheduler_controller::save))
@@ -82,6 +99,13 @@ async fn main() -> std::io::Result<()> {
             .route("/api/goal-config", web::get().to(goal_controller::get))
             .route("/api/goal-config", web::post().to(goal_controller::save))
             .route("/api/goal_ws", web::get().to(goal_controller::goal_ws))
+            // Réglage d'un compteur libre sans ouvrir /goal-config. GET **et** POST
+            // pour la même raison que le compte à rebours : un bouton de Stream Deck
+            // ne sait faire qu'un GET.
+            .route("/api/goal/adjust", web::get().to(goal_controller::adjust))
+            .route("/api/goal/adjust", web::post().to(goal_controller::adjust))
+            .route("/api/goal/set", web::get().to(goal_controller::set))
+            .route("/api/goal/set", web::post().to(goal_controller::set))
             // Compte à rebours
             .route("/timer", web::get().to(timer_controller::display))
             .route("/timer-config", web::get().to(timer_controller::page))

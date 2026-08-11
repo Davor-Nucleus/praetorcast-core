@@ -1,0 +1,743 @@
+{% import "partials/_macros.html" as ui -%}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Text Configurator</title>
+    <!-- Thème des overlays : l'aperçu réutilise le composant de rendu, qui ne
+         connaît que les variables `--pc-*`. Sans cette feuille il s'afficherait
+         sans couleur ni police. Aucun conflit avec le style sombre de cette page,
+         qui n'utilise que ses propres variables. -->
+    <link rel="stylesheet" href="/theme.css">
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --bg-card: #1e1e1e;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --border-light: #333333;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #2563eb;
+            --accent-glow: #60a5fa;
+            --danger: #ef4444;
+            --danger-bg: #450a0a;
+            --spacing-sm: 0.5rem;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
+            --spacing-xl: 2rem;
+            --radius-md: 0.375rem;
+            --radius-lg: 0.5rem;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-glow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: "Instrument Sans", sans-serif;
+        }
+
+        .page-container {
+            min-height: 100vh;
+            padding: var(--spacing-xl);
+        }
+
+        {% include "partials/_header.html" %}
+
+
+        .btn {
+            padding: var(--spacing-sm) var(--spacing-lg);
+            border-radius: var(--radius-md);
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-save {
+            background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .card-list {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+            max-width: 56rem;
+            margin: 0 auto;
+        }
+
+        .card-item {
+            background-color: var(--bg-card);
+            padding: var(--spacing-lg);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            gap: var(--spacing-lg);
+            align-items: flex-start;
+        }
+
+        .card-item.is-previewed {
+            border-color: var(--accent-primary);
+        }
+
+        .controls-container {
+            flex-grow: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .control-label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .input-field {
+            width: 100%;
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-sm);
+            color: var(--text-main);
+            font-size: 0.875rem;
+            font-family: inherit;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-glow);
+        }
+
+        .select-field { appearance: none; }
+
+        textarea.input-field {
+            resize: vertical;
+            min-height: 4.5rem;
+            line-height: 1.4;
+        }
+
+        .field-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+            gap: var(--spacing-md);
+        }
+
+        .actions-container {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-sm);
+            flex-shrink: 0;
+        }
+
+        .btn-icon {
+            padding: var(--spacing-sm);
+            background-color: var(--border-light);
+            border-radius: var(--radius-md);
+            color: var(--text-main);
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-icon:hover { background-color: #525252; }
+
+        .btn-icon:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-delete {
+            background-color: var(--danger-bg);
+            color: var(--danger);
+            margin-top: auto;
+        }
+
+        .btn-delete:hover { background-color: rgba(239, 68, 68, 0.2); }
+
+        .btn-preview {
+            background-color: var(--border-light);
+            color: var(--text-main);
+            font-size: 0.75rem;
+            padding: 0.35rem;
+            border: none;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+        }
+
+        .btn-preview:hover { background-color: #525252; }
+
+        .btn-add-card {
+            display: block;
+            width: 100%;
+            max-width: 56rem;
+            margin: var(--spacing-md) auto 0;
+            padding: var(--spacing-md);
+            border: 2px dashed var(--border-light);
+            border-radius: var(--radius-lg);
+            background: transparent;
+            color: var(--text-muted);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-add-card:hover {
+            border-color: var(--accent-glow);
+            color: var(--accent-glow);
+        }
+
+        .section-title {
+            max-width: 56rem;
+            margin: 0 auto var(--spacing-sm);
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--accent-glow);
+        }
+
+        .panel-hint {
+            max-width: 56rem;
+            margin: 0 auto var(--spacing-md);
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .hide { display: none; }
+
+        /* --- URL d'affichage ---------------------------------------------------
+           Le vrai livrable de cette page : ce qu'on colle dans une source
+           navigateur OBS. Mis en avant, pas relégué dans une aide. */
+        .url-row {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            padding: 0.35rem var(--spacing-sm);
+        }
+
+        .url-value {
+            flex-grow: 1;
+            min-width: 0;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: var(--accent-glow);
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .color-row {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+
+        .color-row input[type="color"] {
+            width: 2.25rem;
+            height: 2.1rem;
+            flex-shrink: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+        }
+
+        /* --- Aperçu en direct (rendu réel, via partials/_text_render.html) ----- */
+        .preview-panel {
+            max-width: 56rem;
+            margin: 0 auto var(--spacing-lg);
+        }
+
+        .preview-stage {
+            position: relative;
+            height: 220px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-light);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* Damier : le fond transparent est le défaut de cette page, il faut
+               pouvoir le distinguer d'un fond noir choisi exprès. */
+            background-color: #16181d;
+            background-image:
+                linear-gradient(45deg, #21242b 25%, transparent 25%),
+                linear-gradient(-45deg, #21242b 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #21242b 75%),
+                linear-gradient(-45deg, transparent 75%, #21242b 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+        }
+
+        .preview-hint {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        /* L'habillage de l'overlay dimensionne en `clamp(…vw…)`, calibré pour une
+           source OBS plein écran : appliqué tel quel dans une scène de 220 px de
+           haut, il déborderait. La taille est donc reprise en absolu ici.
+
+           NE PAS simplifier en `.text-content` : le partiel est inclus après ce
+           <style>, donc à spécificité égale son `clamp()` gagnerait et cette
+           valeur redeviendrait inerte — sans rien casser de visible, l'aperçu se
+           contentant de déborder. */
+        .preview-stage .text-content {
+            font-size: calc(1.9rem * var(--text-scale, 1));
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+
+        {% call ui::header("Configuration Textes", "Gérer les textes animés et leurs URLs d'affichage", "saveConfig()", "Sauvegarder") %}
+
+        <div class="preview-panel">
+            <div class="preview-stage" id="previewStage">
+                <span class="preview-hint">Cliquez « Aperçu » sur une section pour la prévisualiser.</span>
+            </div>
+        </div>
+
+        <h2 class="section-title">Sections de texte</h2>
+        <p class="panel-hint">
+            Chaque section s'affiche dans sa propre source navigateur OBS, via son URL.
+            Le nom est normalisé automatiquement (minuscules, tirets) puisqu'il sert de
+            clé dans l'adresse. L'animation d'entrée est jouée une fois à l'apparition,
+            l'effet continu tourne ensuite en boucle — les deux se cumulent.
+        </p>
+
+        <div class="card-list" id="sectionList">
+            <!-- Les sections sont ajoutées dynamiquement -->
+        </div>
+
+        <button class="btn-add-card" onclick="addSection()">+ Ajouter une section</button>
+    </div>
+
+    {% include "partials/_text_render.html" %}
+
+    <script>
+        const ENTRANCES = [
+            ['none', 'Aucune'],
+            ['fade', 'Fondu'],
+            ['slide', 'Glissement'],
+            ['zoom', 'Zoom'],
+            ['flip', 'Bascule'],
+            ['typewriter', 'Machine à écrire'],
+        ];
+
+        const EFFECTS = [
+            ['none', 'Aucun'],
+            ['marquee', 'Défilement'],
+            ['pulse', 'Pulsation'],
+            ['wave', 'Vague'],
+            ['glitch', 'Glitch'],
+            ['gradient', 'Dégradé animé'],
+        ];
+
+        const ALIGNS = [['left', 'Gauche'], ['center', 'Centre'], ['right', 'Droite']];
+        const VALIGNS = [['top', 'Haut'], ['middle', 'Milieu'], ['bottom', 'Bas']];
+
+        /**
+         * Période par défaut de chaque effet. Une valeur unique ne peut pas
+         * convenir : un défilement lisible demande une dizaine de secondes, une
+         * pulsation moins de deux. Sert aussi à savoir si l'utilisateur a réglé la
+         * durée lui-même (cf. `setEffect`).
+         */
+        const DEFAULT_EFFECT_MS = {
+            none: 2000,
+            marquee: 12000,
+            pulse: 1600,
+            wave: 1200,
+            glitch: 2000,
+            gradient: 5000,
+        };
+
+        const DEFAULT_SECTION = {
+            name: '',
+            label: '',
+            content: '',
+            animation: 'none',
+            effect: 'none',
+            animationMs: 800,
+            effectMs: 2000,
+            scale: 1,
+            color: '',
+            align: 'center',
+            verticalAlign: 'middle',
+            backgroundColor: '',
+        };
+
+        let sections = [];
+        /** Index de la section prévisualisée, ou -1. */
+        let previewIndex = -1;
+
+        const previewStage = document.getElementById('previewStage');
+        const sectionList = document.getElementById('sectionList');
+        const renderer = createTextRenderer(previewStage);
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/text-config');
+                if (response.ok) {
+                    const config = await response.json();
+                    sections = Array.isArray(config.sections) ? config.sections : [];
+                    renderSections();
+                } else {
+                    console.error('Failed to load config');
+                }
+            } catch (error) {
+                console.error('Error loading config:', error);
+            }
+        }
+
+        /**
+         * Réduit un nom libre à une clé d'URL.
+         *
+         * Doublon assumé de `slugify` dans src/models/text.rs : le serveur reste
+         * l'autorité (le `loadConfig()` qui suit chaque sauvegarde réaffiche SA
+         * valeur), cette copie ne sert qu'à montrer l'URL pendant la frappe.
+         * tests/js/text-config.test.cjs rejoue les cas des tests Rust pour que les
+         * deux ne divergent pas en silence.
+         */
+        function slugify(raw) {
+            const accents = {
+                'à': 'a', 'â': 'a', 'ä': 'a', 'á': 'a', 'ã': 'a', 'å': 'a',
+                'ç': 'c',
+                'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
+                'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
+                'ñ': 'n',
+                'ò': 'o', 'ó': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o',
+                'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u',
+                'ý': 'y', 'ÿ': 'y',
+            };
+
+            let slug = '';
+            let lastDash = true;
+
+            for (const raw_c of String(raw == null ? '' : raw).trim().toLowerCase()) {
+                const c = accents[raw_c] || raw_c;
+                if (/[a-z0-9_]/.test(c)) {
+                    slug += c;
+                    lastDash = false;
+                } else if (!lastDash) {
+                    slug += '-';
+                    lastDash = true;
+                }
+            }
+
+            return slug.replace(/-+$/, '');
+        }
+
+        function displayUrl(section, index) {
+            const slug = slugify(section.name) || ('section-' + (index + 1));
+            return location.origin + '/text?name=' + encodeURIComponent(slug);
+        }
+
+        function optionsFor(pairs, selected) {
+            return pairs
+                .map(([value, label]) =>
+                    `<option value="${escapeAttr(value)}"${value === selected ? ' selected' : ''}>${escapeHtml(label)}</option>`)
+                .join('');
+        }
+
+        /** Champ couleur : sélecteur natif + saisie libre, vide = valeur par défaut. */
+        function colorRow(index, field, value, placeholder) {
+            const picker = /^#[0-9a-fA-F]{6}$/.test(value || '') ? value : '#ffffff';
+            return `
+                <div class="color-row">
+                    <input type="color" value="${escapeAttr(picker)}"
+                           oninput="updateSection(${index}, '${field}', this.value)">
+                    <input type="text" class="input-field" value="${escapeAttr(value || '')}"
+                           placeholder="${escapeAttr(placeholder)}"
+                           onchange="updateSection(${index}, '${field}', this.value)">
+                </div>`;
+        }
+
+        function renderSections() {
+            if (sections.length === 0) {
+                sectionList.innerHTML =
+                    '<p class="preview-hint" style="text-align:center">Aucune section. Ajoutez-en une ci-dessous.</p>';
+                return;
+            }
+
+            sectionList.innerHTML = sections.map((section, index) => {
+                const s = { ...DEFAULT_SECTION, ...section };
+                const url = displayUrl(s, index);
+
+                return `
+                <div class="card-item${index === previewIndex ? ' is-previewed' : ''}">
+                    <div class="controls-container">
+                        <div class="field-grid">
+                            <div class="control-group">
+                                <label class="control-label">Libellé</label>
+                                <input type="text" class="input-field" value="${escapeAttr(s.label)}"
+                                       placeholder="Écran de début"
+                                       onchange="updateSection(${index}, 'label', this.value)">
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Nom dans l'URL</label>
+                                <input type="text" class="input-field" value="${escapeAttr(s.name)}"
+                                       placeholder="start"
+                                       oninput="updateSection(${index}, 'name', this.value, true)"
+                                       onchange="updateSection(${index}, 'name', this.value)">
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <label class="control-label">URL d'affichage (à coller dans OBS)</label>
+                            <div class="url-row">
+                                <span class="url-value" id="url-${index}">${escapeHtml(url)}</span>
+                                <button class="btn-preview" onclick="copyUrl(${index})">Copier</button>
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <label class="control-label">Texte affiché</label>
+                            <textarea class="input-field" rows="2" placeholder="Le stream commence !"
+                                      onchange="updateSection(${index}, 'content', this.value)">${escapeHtml(s.content)}</textarea>
+                        </div>
+
+                        <div class="field-grid">
+                            <div class="control-group">
+                                <label class="control-label">Animation d'entrée</label>
+                                <select class="input-field select-field"
+                                        onchange="updateSection(${index}, 'animation', this.value)">
+                                    ${optionsFor(ENTRANCES, s.animation)}
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Durée d'entrée (ms)</label>
+                                <input type="number" class="input-field" min="50" max="20000" step="50"
+                                       value="${escapeAttr(String(s.animationMs))}"
+                                       onchange="updateSection(${index}, 'animationMs', Number(this.value))">
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Effet continu</label>
+                                <select class="input-field select-field"
+                                        onchange="setEffect(${index}, this.value)">
+                                    ${optionsFor(EFFECTS, s.effect)}
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">${s.effect === 'marquee' ? 'Durée d\'un passage (ms)' : 'Période de l\'effet (ms)'}</label>
+                                <input type="number" class="input-field" min="100" max="60000" step="100"
+                                       value="${escapeAttr(String(s.effectMs))}"
+                                       onchange="updateSection(${index}, 'effectMs', Number(this.value))">
+                            </div>
+                        </div>
+
+                        <div class="field-grid">
+                            <div class="control-group">
+                                <label class="control-label">Échelle du texte</label>
+                                <input type="number" class="input-field" min="0.2" max="6" step="0.1"
+                                       value="${escapeAttr(String(s.scale))}"
+                                       onchange="updateSection(${index}, 'scale', Number(this.value))">
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Alignement${s.effect === 'marquee' ? ' (ignoré en défilement)' : ''}</label>
+                                <select class="input-field select-field"
+                                        onchange="updateSection(${index}, 'align', this.value)">
+                                    ${optionsFor(ALIGNS, s.align)}
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Position verticale</label>
+                                <select class="input-field select-field"
+                                        onchange="updateSection(${index}, 'verticalAlign', this.value)">
+                                    ${optionsFor(VALIGNS, s.verticalAlign)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="field-grid">
+                            <div class="control-group">
+                                <label class="control-label">Couleur du texte</label>
+                                ${colorRow(index, 'color', s.color, 'Couleur du thème')}
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Couleur de fond</label>
+                                ${colorRow(index, 'backgroundColor', s.backgroundColor, 'Transparent')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="actions-container">
+                        <button class="btn-icon" onclick="moveUp(${index})" ${index === 0 ? 'disabled' : ''}>▲</button>
+                        <button class="btn-icon" onclick="moveDown(${index})" ${index === sections.length - 1 ? 'disabled' : ''}>▼</button>
+                        <button class="btn-preview" onclick="previewSection(${index})">Aperçu</button>
+                        <button class="btn-icon btn-delete" onclick="deleteSection(${index})">✕</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        /**
+         * Écrit un champ.
+         *
+         * `urlOnly` sert à la frappe du nom : réafficher toute la liste à chaque
+         * touche ferait perdre le focus. On se contente alors de rafraîchir l'URL.
+         */
+        function updateSection(index, field, value, urlOnly) {
+            const section = sections[index];
+            if (!section) return;
+            section[field] = value;
+
+            if (urlOnly) {
+                const el = document.getElementById('url-' + index);
+                if (el) el.textContent = displayUrl(section, index);
+                return;
+            }
+
+            renderSections();
+
+            // L'aperçu suit la section en cours d'édition. `render` étant fondé sur
+            // une empreinte, un champ sans effet visuel ne relance pas l'animation.
+            if (index === previewIndex) {
+                renderer.render({ ...DEFAULT_SECTION, ...section });
+            }
+        }
+
+        /**
+         * Change l'effet, en emmenant sa période avec lui.
+         *
+         * Tant que l'utilisateur n'a pas réglé la durée lui-même (elle vaut encore
+         * le défaut de l'effet précédent), on lui donne celle du nouvel effet —
+         * sinon passer en défilement hériterait des 1,6 s d'une pulsation, soit un
+         * texte illisible.
+         */
+        function setEffect(index, effect) {
+            const section = sections[index];
+            if (!section) return;
+
+            const previous = section.effect || 'none';
+            if (Number(section.effectMs) === DEFAULT_EFFECT_MS[previous]) {
+                section.effectMs = DEFAULT_EFFECT_MS[effect];
+            }
+            updateSection(index, 'effect', effect);
+        }
+
+        function addSection() {
+            const index = sections.length + 1;
+            sections.push({
+                ...DEFAULT_SECTION,
+                id: String(Date.now()) + '-' + index,
+                name: 'section-' + index,
+                label: 'Section ' + index,
+            });
+            renderSections();
+        }
+
+        function deleteSection(index) {
+            if (!confirm('Supprimer cette section ?')) return;
+            sections.splice(index, 1);
+            if (previewIndex === index) {
+                previewIndex = -1;
+                renderer.clear();
+                previewStage.innerHTML = '<span class="preview-hint">Cliquez « Aperçu » sur une section pour la prévisualiser.</span>';
+            } else if (previewIndex > index) {
+                previewIndex -= 1;
+            }
+            renderSections();
+        }
+
+        function moveUp(index) {
+            if (index === 0) return;
+            [sections[index - 1], sections[index]] = [sections[index], sections[index - 1]];
+            renderSections();
+        }
+
+        function moveDown(index) {
+            if (index === sections.length - 1) return;
+            [sections[index + 1], sections[index]] = [sections[index], sections[index + 1]];
+            renderSections();
+        }
+
+        function previewSection(index) {
+            const section = sections[index];
+            if (!section) return;
+            previewIndex = index;
+            // `clear()` oublie l'empreinte : cliquer deux fois « Aperçu » doit
+            // rejouer l'animation, c'est tout l'intérêt du bouton.
+            renderer.clear();
+            renderer.render({ ...DEFAULT_SECTION, ...section });
+            renderSections();
+        }
+
+        async function copyUrl(index) {
+            const section = sections[index];
+            if (!section) return;
+            try {
+                await navigator.clipboard.writeText(displayUrl(section, index));
+            } catch (error) {
+                console.error('Clipboard error:', error);
+                alert(displayUrl(section, index));
+            }
+        }
+
+        async function saveConfig() {
+            try {
+                const response = await fetch('/api/text-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sections }),
+                });
+                if (response.ok) {
+                    alert('Configuration saved successfully!');
+                    // Recharge : le serveur normalise les noms (minuscules,
+                    // dédoublonnage) et c'est SA version qui fait foi pour l'URL.
+                    previewIndex = -1;
+                    renderer.clear();
+                    await loadConfig();
+                } else {
+                    const error = await response.json();
+                    alert('Failed to save configuration: ' + (error.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error saving config:', error);
+                alert('Failed to save configuration: ' + error);
+            }
+        }
+
+        /** Pour un nœud texte. Voir `escapeAttr` pour une valeur d'attribut. */
+        function escapeHtml(text) {
+            return String(text == null ? '' : text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        /** Pour une valeur d'attribut : les guillemets doivent partir aussi, sans
+         *  quoi un texte contenant `"` casserait la ligne. */
+        function escapeAttr(text) {
+            return escapeHtml(text)
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        window.addEventListener('load', () => {
+            loadConfig();
+        });
+    </script>
+</body>
+</html>

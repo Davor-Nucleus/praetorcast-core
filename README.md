@@ -22,7 +22,9 @@ Ce projet est un serveur web en Rust utilisant **Actix-web** et **Askama** (temp
 - **Planning hebdomadaire (Scheduler)** — 7 jours éditables (titre, date, horaire, jaquette, image de fond).
 - **Pilotage OBS** — contrôle du filtre Limiter (obs-websocket v5) sur une source audio : activation, seuil en dB, création automatique du filtre.
 - **Musique & soundboard** — page de configuration avec raccourcis clavier et intégration MPD.
-- **Twitch EventSub** — connexion WebSocket persistante avec reconnexion automatique (followers, channel points).
+- **Twitch EventSub** — connexion WebSocket persistante avec reconnexion automatique : followers, points de chaîne, abonnements, bits, raids, début/fin de direct.
+- **Alertes d'événements** — image, son et phrase par type d'événement, avec paliers par montant (un cheer de 5 000 bits ≠ un cheer de 50). Les abonnements **Prime** ont leur propre déclencheur, distinct du tier 1 payant.
+- **Timer subathon** — barème événement → temps réglable ; les écritures du compte à rebours sont sérialisées pour qu'un ajout automatique et un clic manuel s'additionnent.
 - **Temps réel** — WebSockets pour pousser bannière, état Twitch, channel points et limiteur vers les overlays sans rafraîchissement.
 - **Uploads de médias** — images et sons envoyés depuis l'interface, stockés avec un nom UUID.
 - **Configuration à chaud** — `env.json` relu à chaque requête, aucun redémarrage nécessaire.
@@ -116,6 +118,7 @@ Le serveur lit la configuration depuis `env.json` à la racine du projet (créé
 | `GET /` | Page d'accueil / index |
 | `GET /clock` | Horloge (`?hour=true&minute=true&second=true`) |
 | `GET /banner` | Bannière tournante (cartes) |
+| `GET /text` | Texte animé, une section par source (`?name=start`) |
 | `GET /music-current` | Musique en cours de lecture |
 | `GET /emote-corner` | Émoticônes / emote wall Twitch |
 | `GET /discord-presence` | Présence Discord |
@@ -132,6 +135,7 @@ Le serveur lit la configuration depuis `env.json` à la racine du projet (créé
 |-------|-------------|
 | `GET /music-config` | Config musique / soundboard / limiteur OBS |
 | `GET /banner-config` | Config des cartes de bannière |
+| `GET /text-config` | Config des textes animés et de leurs URLs |
 | `GET /scheduler` | Éditeur de planning hebdomadaire |
 </details>
 
@@ -142,6 +146,10 @@ Le serveur lit la configuration depuis `env.json` à la racine du projet (créé
 - `GET /api/banner-config`
 - `POST /api/banner-config`
 - `POST /api/banner-upload`
+
+**Textes animés**
+- `GET /api/text-config`
+- `POST /api/text-config`
 
 **Scheduler**
 - `GET /api/scheduler-config`
@@ -154,30 +162,73 @@ Le serveur lit la configuration depuis `env.json` à la racine du projet (créé
 - `GET/POST /api/obs/limiter/add` (+1 dB)
 - `GET/POST /api/obs/limiter/subtract` (-1 dB)
 - `GET /api/obs/limiter/toggle`
+
+**Objectifs** — paramètres dans l'URL et double verbe, comme le compte à rebours : un bouton
+de Stream Deck ne sait faire qu'un GET.
+- `GET /api/goal-config`, `POST /api/goal-config`
+- `GET/POST /api/goal/adjust?id=<uuid>&delta=<i64>`
+- `GET/POST /api/goal/set?id=<uuid>&value=<u64>`
+
+Les deux dernières écrivent `manualCurrent` **brut** — pas la valeur affichée, dont
+`baseline` est retranchée — et répondent `409` sur une source `followers`/`subs` (l'écriture
+n'aurait aucun effet) ou `404` avec la liste des objectifs connus sur un `id` inconnu.
 </details>
 
 ---
 
 ## 🔌 WebSockets
 
-Trois WebSockets permettent de pousser les changements en temps réel vers les overlays OBS, sans rafraîchissement manuel :
+Plusieurs WebSockets poussent les changements en temps réel vers les overlays OBS, sans rafraîchissement manuel :
 
 | Route | Flux poussé | Fréquence |
 |-------|-------------|-----------|
 | `/api/banner_ws` | Configuration du banner (liste des cartes JSON) | Sur changement (max 1s) |
-| `/api/twitch_ws` | État Twitch : `{ total_followers, last_follower, connected }` | Sur changement (max 500ms) |
+| `/api/text_ws` | Configuration des textes (toutes les sections) | Sur changement (max 1s) |
+| `/api/twitch_ws` | État Twitch : `{ total_followers, last_follower, connected, live, streamStartedAt }` | Sur changement (max 500ms) |
 | `/api/obs/limiter_ws` | État du limiteur : `{ enabled, threshold }` (ou `null`) | Sur changement (max 1s) |
+| `/api/channel_point_ws` | Alerte déjà résolue : `{ type: "alert", event, config }` | À l'événement |
 
 ---
 
 ## 💜 Intégration Twitch EventSub
 
-Le module `twitch.rs` se connecte en **WebSocket** à l'EventSub API Twitch (`wss://eventsub.wss.twitch.tv/ws`) et souscrit automatiquement aux événements `channel.follow`.
+Le module `twitch.rs` se connecte en **WebSocket** à l'EventSub API Twitch
+(`wss://eventsub.wss.twitch.tv/ws`) et souscrit à sept types d'événements.
+
+| Type | Version | Condition | Devient |
+|---|---|---|---|
+| `channel.follow` | 2 | `broadcaster_user_id` + `moderator_user_id` | Compteur de followers |
+| `channel.channel_points_custom_reward_redemption.add` | 1 | `broadcaster_user_id` | Alerte |
+| `channel.chat.notification` | 1 | `broadcaster_user_id` + `user_id` | Alerte + subathon |
+| `channel.cheer` | 1 | `broadcaster_user_id` | Alerte + subathon |
+| `channel.raid` | 1 | **`to_broadcaster_user_id`** | Alerte + subathon |
+| `stream.online` / `stream.offline` | 1 | `broadcaster_user_id` | État `live` |
 
 - **Connexion persistante** avec reconnexion automatique (toutes les 5s).
 - **Détection de token invalide** (HTTP 401 → message d'erreur explicite).
-- **État temps réel** : `total_followers` mis à jour à chaque nouveau follower.
 - **Reconnexion à chaud** gérée via `session_reconnect` de Twitch.
+- **Deux régimes d'échec.** Les follows et les points de chaîne sont indispensables : leur
+  refus coupe la session, ce qui rend le problème visible. Les alertes d'événements
+  **loguent et continuent** — sans quoi un `bits:read` pas encore accordé ferait refuser
+  `channel.cheer` et emporterait tout le reste avec lui, en rebouclant toutes les 5 s. Le
+  corps de la réponse Twitch est repris dans le log, donc il nomme lui-même le droit
+  manquant.
+
+> [!NOTE]
+> **Tous** les abonnements passent par `channel.chat.notification`, et non par les
+> `channel.subscribe` / `channel.subscription.*` qu'on attendrait : c'est le seul type
+> EventSub dont la charge utile porte `is_prime`, donc le seul qui distingue un
+> abonnement **Prime** d'un tier 1 payant. Il demande le droit `user:read:chat`, et sa
+> condition un `user_id` en plus — celui du compte qui lit le chat, ici le diffuseur.
+>
+> Ne transporte pas les messages de chat ordinaires (c'est `channel.chat.message`), mais
+> transporte les annonces et les raids : les `notice_type` non reconnus sont ignorés,
+> sans quoi les raids seraient comptés deux fois.
+
+> [!NOTE]
+> Un don groupé émet un `community_sub_gift` récapitulatif **puis** un `sub_gift` par
+> bénéficiaire, tous porteurs du même `community_gift_id`. Ces derniers sont donc
+> ignorés : les compter deux fois doublerait les alertes et le temps du subathon.
 
 ---
 
@@ -200,6 +251,30 @@ Le module `twitch.rs` se connecte en **WebSocket** à l'EventSub API Twitch (`ws
 - Normalisation automatique des chemins d'images (`banner/img.png` → `/public/banner/img.png`).
 - Fallback automatique en cas d'erreur de parsing JSON.
 - Upload d'images avec génération d'UUID.
+
+### ✍️ Textes animés
+- **Une section = un texte, une URL.** `/text-config` définit des sections nommées ;
+  chacune s'affiche via `/text?name=<nom>` dans sa propre source navigateur OBS.
+  Le nom est normalisé à l'enregistrement (minuscules, accents aplatis, tirets) et
+  dédoublonné — c'est une clé d'URL, deux homonymes rendraient l'un des deux
+  inatteignable.
+- **Deux animations cumulables**, deux réglages distincts :
+  - *entrée*, jouée une fois — `fade`, `slide`, `zoom`, `flip`, `typewriter` ;
+  - *effet continu*, en boucle — `marquee`, `pulse`, `wave`, `glitch`, `gradient`.
+
+  L'effet ne démarre qu'à la fin de l'entrée : les deux animent `transform`, et un
+  `wave` posé d'emblée écraserait le dévoilement lettre à lettre du `typewriter`.
+- **Fond transparent par défaut**, contrairement à `/banner` qui est plein écran sur
+  noir : cette page est une incrustation. Taille, couleur, alignement, position
+  verticale et couleur de fond se règlent par section.
+- **Le rendu ne s'écrit qu'une fois** : `templates/partials/_text_render.html` est
+  partagé par `/text` et par l'aperçu de `/text-config`, qui montre donc le rendu réel.
+  Un partiel Askama et non un asset de `public/`, pour la même raison que les barres
+  d'objectif.
+- **Mise à jour sans rafraîchir OBS.** `/api/text_ws` pousse toutes les sections ; la
+  page retrouve la sienne à chaque envoi. Une empreinte des champs visuels évite de
+  reconstruire le DOM quand rien de visible n'a changé — sans elle, un « Sauvegarder »
+  sur une **autre** section relancerait l'animation en plein direct.
 
 ### 🎯 Barres d'objectif
 - Sources `followers` (relevée par EventSub), `subs` (Helix, cache de 60 s) ou `manual`.
@@ -233,7 +308,7 @@ Le module `twitch.rs` se connecte en **WebSocket** à l'EventSub API Twitch (`ws
 
 ## 🧪 Tests
 
-### Rust — **95 tests**
+### Rust — **114 tests**
 
 Intégrés directement dans les fichiers sources (`#[cfg(test)] mod tests`).
 
@@ -250,7 +325,7 @@ cargo test models::config
 > [!TIP]
 > Les tests sont isolés du code de production : ils ne sont compilés qu'avec `cargo test`, pas en `cargo build`.
 
-### Overlays et pages de configuration (JavaScript) — **65 assertions**
+### Overlays et pages de configuration (JavaScript) — **83 assertions**
 
 ```sh
 node tests/js/run.cjs
@@ -261,6 +336,14 @@ portée de `cargo test` : réutilisation des barres d'un rafraîchissement à l'
 quoi la transition CSS repartirait de zéro), empreinte de structure qui empêche la
 rotation de la bannière de redémarrer à chaque follower gagné, résolution d'une carte
 vers son objectif, et échappement — en texte comme en attribut, deux règles distinctes.
+
+`chat.test.cjs` couvre la modération du chat, qui est entièrement côté client : suppression
+d'un message par son `target-msg-id`, purge d'un utilisateur par `user-id` (ou par login
+quand le tag manque), vidage complet, et deux régressions de routage — un message dont le
+texte contient « CLEARCHAT » doit s'afficher au lieu de vider l'overlay, et un « PING » tapé
+dans le chat ne doit pas emporter la trame. C'est la seule suite qui charge un script
+externe (`public/js/chat-common.js`) : elle le concatène au bloc inline du template dans le
+même contexte, puisque les deux moitiés partagent leurs variables.
 
 Aucune dépendance à installer : `tests/js/dom-stub.cjs` fournit le minimum de DOM
 utilisé par les templates, et chaque suite charge le `<script>` **depuis le fichier

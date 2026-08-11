@@ -36,7 +36,14 @@ class Element {
     this.style = new Style();
     this.classList = new ClassList(this);
     this._listeners = new Map();
+    this._attrs = new Map();
   }
+
+  // Les attributs ne sont pas du balisage : `_text_render.html` y range le texte
+  // que les copies du glitch relisent via `content: attr(data-text)`.
+  setAttribute(name, value) { this._attrs.set(name, String(value)); }
+  getAttribute(name)        { return this._attrs.has(name) ? this._attrs.get(name) : null; }
+  removeAttribute(name)     { this._attrs.delete(name); }
 
   addEventListener(type, fn) {
     if (!this._listeners.has(type)) this._listeners.set(type, []);
@@ -170,11 +177,28 @@ function buildGoalTemplate() {
 
 function makeDocument(ids = {}) {
   const registry = new Map(Object.entries(ids));
+  // Les nœuds fabriqués par la page ne figurent pas dans `ids`. Sans ce suivi,
+  // `getElementById` ne retrouve jamais un nœud que le code vient de créer et de
+  // nommer — `chat-common.js` cherche ainsi `msg-<uuid>` pour lancer le fondu de
+  // suppression, et prenait donc en test une branche de repli qu'un navigateur
+  // n'emprunte jamais.
+  const created = [];
+
   return {
     _registry: registry,
     activeElement: null,
-    getElementById: (id) => registry.get(id) ?? null,
-    createElement: (tag) => el(tag),
+    getElementById: (id) => registry.get(id) ?? created.find((n) => n.id === id) ?? null,
+    createElement: (tag) => {
+      const node = el(tag);
+      created.push(node);
+      return node;
+    },
+    /** Nœud texte : un `Element` sans classe dont seul le contenu compte. */
+    createTextNode: (data) => {
+      const node = el('#text');
+      node.textContent = String(data);
+      return node;
+    },
     querySelectorAll: () => [],
   };
 }

@@ -28,14 +28,27 @@ pub const VALIDATE_URL: &str = "https://id.twitch.tv/oauth2/validate";
 
 /// Droits demandés, repris de ce que le projet exploite réellement :
 /// followers et abonnés pour les barres d'objectif, redemptions pour les points de
-/// chaîne, `chat:read` pour le chat, `user:read:email` pour identifier le compte.
+/// chaîne, `chat:read` pour le chat, `user:read:email` pour identifier le compte,
+/// `bits:read` pour les alertes de cheer.
+///
+/// `channel:read:subscriptions` sert au compteur d'abonnés, et les raids comme
+/// `stream.online` / `stream.offline` n'exigent aucun droit.
+///
+/// `user:read:chat` ouvre `channel.chat.notification`, d'où viennent **toutes** les
+/// alertes d'abonnement : c'est le seul type EventSub qui distingue un Prime d'un
+/// tier 1 payant. Sans lui, aucune alerte de sub, de réabonnement ni de don, et
+/// aucun temps de subathon associé. Un jeton existant ne gagne pas le droit tout
+/// seul — `/settings` affiche « Droits manquants » jusqu'au reclic sur « Connecter
+/// Twitch ».
 pub const SCOPES: &[&str] = &[
     "user:read:email",
     "user:read:follows",
     "moderator:read:followers",
     "chat:read",
+    "user:read:chat",
     "channel:read:redemptions",
     "channel:read:subscriptions",
+    "bits:read",
 ];
 
 /// URL de redirection à déclarer dans la console développeur Twitch.
