@@ -12,7 +12,6 @@ use std::collections::HashSet;
 use std::fs;
 
 const TEXT_PATH: &str = "data/text.json";
-const TEXT_EXAMPLE_PATH: &str = "data/text.example.json";
 
 /// Animation d'**entrée**, jouée une seule fois quand le texte apparaît.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -244,18 +243,16 @@ fn reorder(sections: Vec<TextSection>) -> Vec<TextSection> {
 
 pub fn read() -> Result<TextConfig, String> {
     // `data/text.json` n'est pas suivi par git (il est réécrit à chaque « Save »).
-    // En son absence (premier lancement / clone frais), on retombe sur l'exemple
-    // committé, et à défaut sur une config vide — jamais une erreur bloquante.
+    // En son absence (premier lancement / clone frais), on le crée vide sur-le-champ
+    // plutôt que de passer par un `text.example.json` committé comme le fait
+    // `banner` : la page de configuration part d'une liste vierge, sans sections de
+    // démonstration à supprimer avant de poser les siennes.
     let content = match fs::read_to_string(TEXT_PATH) {
         Ok(c) => c,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            if let Ok(c) = fs::read_to_string(TEXT_EXAMPLE_PATH) {
-                c
-            } else {
-                let default = TextConfig::default();
-                write(&default)?;
-                return Ok(default);
-            }
+            let default = TextConfig::default();
+            write(&default)?;
+            return Ok(default);
         }
         Err(e) => return Err(format!("Error reading text.json: {}", e)),
     };
