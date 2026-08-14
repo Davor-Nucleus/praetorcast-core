@@ -78,9 +78,9 @@
     .text-stage.align-center .text-content { text-align: center; }
     .text-stage.align-right  .text-content { text-align: right; }
 
-    /* Découpage par lettre — nécessaire à `typewriter`, `cascade` et `wave`,
-       inutile ailleurs (voir `needsChars` dans le script). `pre` conserve les
-       espaces, qui deviennent des spans comme les autres. */
+    /* Découpage par lettre — nécessaire à `typewriter`, `cascade`, `scatter` et
+       `wave`, inutile ailleurs (voir `needsChars` dans le script). `pre` conserve
+       les espaces, qui deviennent des spans comme les autres. */
     .text-char {
         display: inline-block;
         white-space: pre;
@@ -146,6 +146,56 @@
         to   { opacity: 1; filter: blur(0);      transform: scale(1); }
     }
 
+    /* Entrées « posées ». Aucune ne dépasse son état final : elles servent quand
+       `drop` ou `bounce` agitent trop une incrustation déjà chargée. */
+    .text-line.anim-rise   { animation: text-rise   var(--text-anim-ms, 800ms) cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .text-line.anim-reveal { animation: text-reveal var(--text-anim-ms, 800ms) cubic-bezier(0.65, 0, 0.35, 1) both; }
+
+    /* Pendant de `drop`, sans le rebond : le texte remonte et s'arrête. */
+    @keyframes text-rise {
+        from { opacity: 0; transform: translateY(70%); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Le seul dévoilement sans mouvement : le texte est en place, c'est le masque
+       qui s'ouvre. `clip-path` plutôt qu'une largeur animée — la ligne garderait
+       sinon sa largeur finale et le texte se recomposerait en se dévoilant. */
+    @keyframes text-reveal {
+        from { clip-path: inset(0 100% 0 0); }
+        to   { clip-path: inset(0 0 0 0); }
+    }
+
+    /* Les deux entrées « appuyées », pour un titre qu'on veut voir arriver.
+       `stamp` part de très loin en avant : le flou masque le crénelage d'un texte
+       agrandi ×3, et l'écrasement final donne le poids du tampon. */
+    .text-line.anim-spin  { animation: text-spin  var(--text-anim-ms, 800ms) cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .text-line.anim-stamp { animation: text-stamp var(--text-anim-ms, 800ms) cubic-bezier(0.3, 0.8, 0.4, 1) both; }
+
+    @keyframes text-spin {
+        0%   { opacity: 0; transform: rotate(-220deg) scale(0.3); }
+        60%  { opacity: 1; transform: rotate(12deg) scale(1.04); }
+        100% { opacity: 1; transform: rotate(0) scale(1); }
+    }
+
+    @keyframes text-stamp {
+        0%   { opacity: 0; filter: blur(0.16em); transform: scale(3); }
+        55%  { opacity: 1; filter: blur(0);      transform: scale(0.9); }
+        72%  { transform: scale(1.06); }
+        88%  { transform: scale(0.98); }
+        100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Allumage de néon. `steps(1, end)` est indispensable : interpolée, la même
+       suite de valeurs donnerait un fondu hésitant au lieu de coupures franches. */
+    .text-line.anim-flicker { animation: text-flicker var(--text-anim-ms, 800ms) steps(1, end) both; }
+
+    @keyframes text-flicker {
+        0%, 14%, 30%, 48%  { opacity: 0; }
+        9%, 22%, 40%       { opacity: 1; }
+        56%                { opacity: 0.55; }
+        62%, 100%          { opacity: 1; }
+    }
+
     /* Machine à écrire : chaque lettre bascule à son tour, l'ensemble tenant dans
        `--text-anim-ms`. Le pas est calculé en CSS (`/ var(--char-count)`) plutôt
        qu'écrit lettre par lettre en JS — un seul style inline suffit alors. */
@@ -171,6 +221,35 @@
         to   { opacity: 1; transform: translateY(0) scale(1); }
     }
 
+    /* Dispersion : même minutage que `cascade` (durée et pas à la moitié de
+       `--text-anim-ms`), mais chaque lettre arrive d'une direction différente.
+       Trois trajectoires alternées par `nth-child` plutôt qu'un tirage aléatoire
+       en JS : le rendu doit être identique d'un affichage à l'autre, une source
+       OBS pouvant être rechargée en plein direct. */
+    .text-line.anim-scatter .text-char {
+        opacity: 0;
+        animation: text-scatter-a calc(var(--text-anim-ms, 800ms) / 2) cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: calc(var(--char-index) * (var(--text-anim-ms, 800ms) / var(--char-count, 1) / 2));
+    }
+
+    .text-line.anim-scatter .text-char:nth-child(3n+2) { animation-name: text-scatter-b; }
+    .text-line.anim-scatter .text-char:nth-child(3n)   { animation-name: text-scatter-c; }
+
+    @keyframes text-scatter-a {
+        from { opacity: 0; transform: translate(-0.9em, -0.7em) rotate(-20deg) scale(0.7); }
+        to   { opacity: 1; transform: translate(0, 0) rotate(0) scale(1); }
+    }
+
+    @keyframes text-scatter-b {
+        from { opacity: 0; transform: translate(0.8em, 0.8em) rotate(16deg) scale(0.7); }
+        to   { opacity: 1; transform: translate(0, 0) rotate(0) scale(1); }
+    }
+
+    @keyframes text-scatter-c {
+        from { opacity: 0; transform: translate(1em, -0.6em) rotate(10deg) scale(0.7); }
+        to   { opacity: 1; transform: translate(0, 0) rotate(0) scale(1); }
+    }
+
     .text-cursor {
         display: inline-block;
         width: 0.08em;
@@ -183,7 +262,8 @@
     }
 
     .fx-gradient + .text-cursor,
-    .fx-rainbow + .text-cursor { background: var(--pc-accent); }
+    .fx-rainbow + .text-cursor,
+    .fx-shine + .text-cursor { background: var(--pc-accent); }
 
     @keyframes text-caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 
@@ -342,6 +422,71 @@
         to   { background-position: -200% 50%; }
     }
 
+    /* Reflet : troisième dégradé découpé sur le texte, mais le seul qui garde la
+       couleur choisie — seule la bande claire s'y substitue au passage. Les deux
+       autres (`gradient`, `rainbow`) repeignent tout le texte. */
+    .text-content.fx-shine {
+        background: linear-gradient(100deg,
+            var(--text-color, var(--pc-text)) 42%,
+            #ffffff 50%,
+            var(--text-color, var(--pc-text)) 58%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        background-size: 250% auto;
+        animation: text-shine var(--text-effect-ms, 2000ms) linear infinite;
+    }
+
+    /* Le balayage part et finit hors du texte : aux deux bouts, la bande claire
+       est dehors, la reprise ne se voit donc pas. */
+    @keyframes text-shine {
+        from { background-position: 160% 50%; }
+        to   { background-position: -60% 50%; }
+    }
+
+    /* Clignotement franc. `steps(1, end)` encore : un « LIVE » qui s'allume par
+       fondu ressemble à une pulsation, pas à un voyant. */
+    .text-content.fx-blink { animation: text-blink var(--text-effect-ms, 2000ms) steps(1, end) infinite; }
+
+    @keyframes text-blink {
+        0%, 64%   { opacity: 1; }
+        65%, 100% { opacity: 0; }
+    }
+
+    /* Battement : deux pulsations rapprochées puis un repos, là où `fx-pulse`
+       respire à intervalle régulier. Le repos occupe plus de la moitié du cycle,
+       c'est lui qui fait entendre le « boum-boum ». */
+    .text-content.fx-heartbeat { animation: text-heartbeat var(--text-effect-ms, 2000ms) ease-in-out infinite; }
+
+    @keyframes text-heartbeat {
+        0%, 42%, 100% { transform: scale(1); }
+        11%           { transform: scale(1.13); }
+        22%           { transform: scale(1); }
+        33%           { transform: scale(1.08); }
+    }
+
+    /* Gelée : la largeur et la hauteur s'échangent, à volume constant. Amplitude
+       plus large que les autres effets — une déformation discrète passerait pour
+       un défaut d'affichage. */
+    .text-content.fx-jelly { animation: text-jelly var(--text-effect-ms, 2000ms) ease-in-out infinite; }
+
+    @keyframes text-jelly {
+        0%, 100% { transform: scale(1, 1); }
+        25%      { transform: scale(1.12, 0.88); }
+        50%      { transform: scale(0.92, 1.08); }
+        75%      { transform: scale(1.05, 0.96); }
+    }
+
+    /* Rotation continue : le texte passe par la tranche puis se lit à l'envers,
+       comme un panneau qui tourne. `linear` et un tour complet — une courbe
+       adoucie donnerait un à-coup à chaque reprise de boucle. */
+    .text-content.fx-revolve { animation: text-revolve var(--text-effect-ms, 2000ms) linear infinite; }
+
+    @keyframes text-revolve {
+        from { transform: perspective(1200px) rotateY(0); }
+        to   { transform: perspective(1200px) rotateY(360deg); }
+    }
+
     /* Une source OBS ne clignote jamais malgré la préférence système, mais un
        aperçu ouvert dans le navigateur du streamer, si. */
     @media (prefers-reduced-motion: reduce) {
@@ -373,15 +518,23 @@
      *    d'emblée écraserait le dévoilement lettre à lettre du typewriter.
      */
     function createTextRenderer(root) {
-        const ENTRANCES = ['fade', 'slide', 'zoom', 'flip', 'bounce', 'drop', 'swing', 'blur', 'typewriter', 'cascade'];
-        const EFFECTS = ['marquee', 'pulse', 'wave', 'glitch', 'gradient', 'float', 'tilt', 'shake', 'neon', 'rainbow'];
+        const ENTRANCES = [
+            'fade', 'slide', 'zoom', 'flip', 'bounce', 'drop', 'swing', 'blur',
+            'rise', 'reveal', 'spin', 'stamp', 'flicker',
+            'typewriter', 'cascade', 'scatter',
+        ];
+        const EFFECTS = [
+            'marquee', 'pulse', 'wave', 'glitch', 'gradient',
+            'float', 'tilt', 'shake', 'neon', 'rainbow',
+            'blink', 'heartbeat', 'shine', 'jelly', 'revolve',
+        ];
         const ALIGNS = ['left', 'center', 'right'];
         const VALIGNS = ['top', 'middle', 'bottom'];
 
         /** Animations qui adressent chaque lettre séparément — les seules à imposer
          *  le découpage en spans. Partout ailleurs un nœud texte simple suffit, et
          *  se coupe correctement en fin de ligne. */
-        const PER_CHAR_ENTRANCES = ['typewriter', 'cascade'];
+        const PER_CHAR_ENTRANCES = ['typewriter', 'cascade', 'scatter'];
         const PER_CHAR_EFFECTS = ['wave'];
 
         function needsChars(animation, effect) {

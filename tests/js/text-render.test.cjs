@@ -180,6 +180,14 @@ check('cascade découpe aussi : chaque lettre porte sa propre animation', () => 
   assert.strictEqual(content.style.getPropertyValue('--char-count'), '3');
 });
 
+check('scatter découpe aussi : chaque lettre vient de sa propre direction', () => {
+  const { renderer, root } = mountRenderer();
+  renderer.render(section({ content: 'abc', animation: 'scatter' }));
+  const { content } = parts(root);
+  assert.strictEqual(content.children.length, 3);
+  assert.strictEqual(content.style.getPropertyValue('--char-count'), '3');
+});
+
 check('sans typewriter, cascade ni wave, le contenu reste un nœud texte', () => {
   const { renderer, root } = mountRenderer();
   renderer.render(section({ content: 'abc', animation: 'fade', effect: 'pulse' }));
@@ -201,11 +209,16 @@ check('typewriter ajoute un curseur, les autres non', () => {
   without.renderer.render(section({ animation: 'fade' }));
   assert.strictEqual(parts(without.root).line.querySelector('.text-cursor'), null);
 
-  // `cascade` dévoile lettre à lettre comme le typewriter, mais sans curseur :
-  // les lettres arrivent en mouvement, pas sous une frappe.
-  const cascade = mountRenderer();
-  cascade.renderer.render(section({ animation: 'cascade' }));
-  assert.strictEqual(parts(cascade.root).line.querySelector('.text-cursor'), null);
+  // `cascade` et `scatter` dévoilent lettre à lettre comme le typewriter, mais
+  // sans curseur : les lettres arrivent en mouvement, pas sous une frappe.
+  for (const animation of ['cascade', 'scatter']) {
+    const perChar = mountRenderer();
+    perChar.renderer.render(section({ animation }));
+    assert.strictEqual(
+      parts(perChar.root).line.querySelector('.text-cursor'), null,
+      `${animation} ne doit pas afficher de curseur`
+    );
+  }
 });
 
 // --- Enchaînement entrée → effet --------------------------------------------
@@ -282,11 +295,30 @@ check('align, verticalAlign et marquee posent leurs classes', () => {
  */
 check('chaque animation proposée pose sa classe ET a sa règle CSS', () => {
   const partial = fs.readFileSync(`${TPL_DIR}/partials/_text_render.html`, 'utf8');
+  const config = fs.readFileSync(`${TPL_DIR}/text_config.html`, 'utf8');
+
   const listed = (name) =>
     new RegExp(`const ${name} = \\[([^\\]]*)\\]`).exec(partial)[1]
       .split(',')
       .map((v) => v.trim().replace(/^'|'$/g, ''))
       .filter(Boolean);
+
+  // Le configurateur liste des paires `['clé', 'Libellé']` : seule la clé compte.
+  const offered = (name) =>
+    Array.from(
+      new RegExp(`const ${name} = \\[([^\\]]*\\])[^;]*`).exec(config)[0].matchAll(/\['([a-z]+)'/g),
+      (m) => m[1]
+    ).filter((v) => v !== 'none');
+
+  // Garde-fou : sans lui, une regex qui cesserait de capturer ferait passer ce
+  // test à vide — il ne vérifierait plus rien tout en restant vert.
+  assert.ok(listed('ENTRANCES').length >= 16, 'liste des entrées non capturée');
+  assert.ok(listed('EFFECTS').length >= 15, 'liste des effets non capturée');
+
+  // Le configurateur ne doit ni cacher une animation existante, ni en proposer
+  // une que le rendu ignorerait (`oneOf` la ramènerait au défaut, sans erreur).
+  assert.deepStrictEqual(offered('ENTRANCES'), listed('ENTRANCES'));
+  assert.deepStrictEqual(offered('EFFECTS'), listed('EFFECTS'));
 
   for (const animation of listed('ENTRANCES')) {
     const { renderer, root } = mountRenderer();

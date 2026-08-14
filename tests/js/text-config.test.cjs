@@ -152,6 +152,35 @@ await check('changer d\'effet emmène sa période par défaut', () => {
   assert.strictEqual(api.getSections()[0].effectMs, 12000, 'un défilement à 2 s serait illisible');
 });
 
+/**
+ * Chaque effet proposé doit avoir sa période par défaut.
+ *
+ * Une entrée manquante dans `DEFAULT_EFFECT_MS` ne casse rien de visible : la
+ * durée devient `undefined`, le rendu retombe sur 2000 ms — et un défilement de
+ * 2 s défile trop vite pour être lu.
+ */
+await check('chaque effet emmène une période par défaut exploitable', () => {
+  const config = fs.readFileSync(`${TPL_DIR}/text_config.html`, 'utf8');
+  const effects = Array.from(
+    /const EFFECTS = \[([^\]]*\])[^;]*/.exec(config)[0].matchAll(/\['([a-z]+)'/g),
+    (m) => m[1]
+  );
+  assert.ok(effects.length >= 15, 'liste des effets non capturée');
+
+  const { api } = mountConfig();
+  for (const effect of effects) {
+    // 2000 est le défaut de « aucun effet » : la période n'a pas été réglée à la
+    // main, `setEffect` doit donc poser celle du nouvel effet.
+    api.setSections([{ name: 'a', effect: 'none', effectMs: 2000 }]);
+    api.setEffect(0, effect);
+    const ms = api.getSections()[0].effectMs;
+    assert.ok(
+      Number.isFinite(ms) && ms > 0,
+      `l'effet ${effect} n'a pas de période par défaut (DEFAULT_EFFECT_MS)`
+    );
+  }
+});
+
 await check('une période réglée à la main survit au changement d\'effet', () => {
   const { api } = mountConfig();
   api.setSections([{ name: 'a', effect: 'none', effectMs: 4321 }]);

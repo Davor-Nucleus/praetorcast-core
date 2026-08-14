@@ -285,15 +285,18 @@ Le module `twitch.rs` se connecte en **WebSocket** à l'EventSub API Twitch
   inatteignable.
 - **Deux animations cumulables**, deux réglages distincts :
   - *entrée*, jouée une fois — `fade`, `slide`, `zoom`, `flip`, `bounce`, `drop`,
-    `swing`, `blur`, `typewriter`, `cascade` ;
+    `swing`, `blur`, `rise`, `reveal`, `spin`, `stamp`, `flicker`, `typewriter`,
+    `cascade`, `scatter` ;
   - *effet continu*, en boucle — `marquee`, `pulse`, `wave`, `glitch`, `gradient`,
-    `float`, `tilt`, `shake`, `neon`, `rainbow`.
+    `float`, `tilt`, `shake`, `neon`, `rainbow`, `blink`, `heartbeat`, `shine`,
+    `jelly`, `revolve`.
 
   L'effet ne démarre qu'à la fin de l'entrée : les deux animent `transform`, et un
   `wave` posé d'emblée écraserait le dévoilement lettre à lettre du `typewriter`.
-  `typewriter` et `cascade` (comme `wave`) découpent le texte en un span par
-  lettre ; les autres gardent un nœud texte simple, qui se coupe mieux en fin de
-  ligne.
+  `typewriter`, `cascade` et `scatter` (comme `wave`) découpent le texte en un span
+  par lettre ; les autres gardent un nœud texte simple, qui se coupe mieux en fin de
+  ligne. `shine` est le seul dégradé qui garde la couleur choisie — `gradient` et
+  `rainbow` repeignent tout le texte.
 - **Fond transparent par défaut**, contrairement à `/banner` qui est plein écran sur
   noir : cette page est une incrustation. Taille, couleur, alignement, position
   verticale et couleur de fond se règlent par section.

@@ -32,11 +32,26 @@ pub enum TextAnimation {
     Swing,
     /// Mise au point : le texte se précise depuis un flou.
     Blur,
+    /// Montée depuis le bas, sans dépassement. Pendant de `Drop`, et le seul
+    /// mouvement vertical qui se pose sans rebond.
+    Rise,
+    /// Dévoilement par balayage, de gauche à droite. Le texte ne bouge pas :
+    /// c'est le masque qui s'ouvre.
+    Reveal,
+    /// Tournoiement : arrivée en rotation, depuis une taille réduite.
+    Spin,
+    /// Tampon : le texte s'abat depuis une taille démesurée et s'écrase.
+    Stamp,
+    /// Allumage de néon : quelques clignotements avant de tenir.
+    Flicker,
     /// Machine à écrire : les caractères s'affichent un à un.
     Typewriter,
     /// Cascade : les lettres montent une à une. Comme `Typewriter`, mais chaque
     /// lettre est animée au lieu d'être simplement dévoilée.
     Cascade,
+    /// Dispersion : les lettres convergent vers leur place depuis des directions
+    /// différentes. Comme `Cascade`, chaque lettre est animée séparément.
+    Scatter,
 }
 
 /// Animation **continue**, rejouée en boucle tant que le texte est affiché.
@@ -68,6 +83,18 @@ pub enum TextEffect {
     /// Dégradé arc-en-ciel défilant. Distinct de `Gradient`, qui suit le thème :
     /// celui-ci a ses propres teintes et reste visible quel que soit l'habillage.
     Rainbow,
+    /// Clignotement franc, sans fondu — pour un « LIVE » ou un compte à rebours.
+    Blink,
+    /// Battement de cœur : deux pulsations rapprochées, puis un temps de repos.
+    /// Distinct de `Pulse`, qui respire à intervalle régulier.
+    Heartbeat,
+    /// Reflet balayant le texte. Conserve la couleur choisie, là où `Gradient` et
+    /// `Rainbow` la remplacent : seule la bande lumineuse s'y substitue.
+    Shine,
+    /// Gelée : déformation élastique, la largeur et la hauteur s'échangent.
+    Jelly,
+    /// Rotation continue autour de l'axe vertical, comme un panneau qui tourne.
+    Revolve,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -434,8 +461,14 @@ mod tests {
             TextAnimation::Drop,
             TextAnimation::Swing,
             TextAnimation::Blur,
+            TextAnimation::Rise,
+            TextAnimation::Reveal,
+            TextAnimation::Spin,
+            TextAnimation::Stamp,
+            TextAnimation::Flicker,
             TextAnimation::Typewriter,
             TextAnimation::Cascade,
+            TextAnimation::Scatter,
         ];
         for animation in entrances {
             let json = serde_json::to_string(&animation).unwrap();
@@ -460,6 +493,11 @@ mod tests {
             TextEffect::Shake,
             TextEffect::Neon,
             TextEffect::Rainbow,
+            TextEffect::Blink,
+            TextEffect::Heartbeat,
+            TextEffect::Shine,
+            TextEffect::Jelly,
+            TextEffect::Revolve,
         ];
         for effect in effects {
             let json = serde_json::to_string(&effect).unwrap();
