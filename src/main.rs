@@ -43,6 +43,10 @@ async fn main() -> std::io::Result<()> {
         timer_controller::run_subathon(subathon_state, subathon_notify).await;
     });
 
+    // Canal des alertes de test du configurateur. Séparé de celui des vraies alertes :
+    // voir `channel_point_controller::AlertTest`.
+    let alert_test = web::Data::new(channel_point_controller::AlertTest::default());
+
     println!("Serveur en cours d'exécution sur http://127.0.0.1:{}", port);
 
     HttpServer::new(move || {
@@ -50,6 +54,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(twitch_data.clone())
             .app_data(reload_data.clone())
             .app_data(timer_notify.clone())
+            .app_data(alert_test.clone())
             // Fichiers statiques
             .service(Files::new("/public", "./public"))
             // Pages d'affichage
@@ -93,6 +98,9 @@ async fn main() -> std::io::Result<()> {
             .route("/api/channel-points-upload-image", web::post().to(channel_point_controller::upload_image))
             .route("/api/channel-points-upload-sound", web::post().to(channel_point_controller::upload_sound))
             .route("/api/channel_point_ws", web::get().to(channel_point_controller::redemption_ws))
+            // Bouton « Tester » du configurateur : joue une ligne dans les overlays
+            // ouverts sans attendre l'événement Twitch correspondant.
+            .route("/api/channel-points/test", web::post().to(channel_point_controller::test))
             // Barre d'objectif
             .route("/goal", web::get().to(goal_controller::display))
             .route("/goal-config", web::get().to(goal_controller::page))

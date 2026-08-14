@@ -172,10 +172,24 @@ check('wave découpe aussi, même sans animation d\'entrée', () => {
   assert.strictEqual(parts(root).content.children.length, 3);
 });
 
-check('sans typewriter ni wave, le contenu reste un nœud texte', () => {
+check('cascade découpe aussi : chaque lettre porte sa propre animation', () => {
+  const { renderer, root } = mountRenderer();
+  renderer.render(section({ content: 'abc', animation: 'cascade' }));
+  const { content } = parts(root);
+  assert.strictEqual(content.children.length, 3);
+  assert.strictEqual(content.style.getPropertyValue('--char-count'), '3');
+});
+
+check('sans typewriter, cascade ni wave, le contenu reste un nœud texte', () => {
   const { renderer, root } = mountRenderer();
   renderer.render(section({ content: 'abc', animation: 'fade', effect: 'pulse' }));
   assert.strictEqual(parts(root).content.children.length, 0);
+
+  // Les entrées ajoutées après coup ne découpent pas : `bounce` anime la ligne
+  // entière, un découpage inutile empêcherait la coupure en fin de ligne.
+  const other = mountRenderer();
+  other.renderer.render(section({ content: 'abc', animation: 'bounce', effect: 'neon' }));
+  assert.strictEqual(parts(other.root).content.children.length, 0);
 });
 
 check('typewriter ajoute un curseur, les autres non', () => {
@@ -186,6 +200,12 @@ check('typewriter ajoute un curseur, les autres non', () => {
   const without = mountRenderer();
   without.renderer.render(section({ animation: 'fade' }));
   assert.strictEqual(parts(without.root).line.querySelector('.text-cursor'), null);
+
+  // `cascade` dévoile lettre à lettre comme le typewriter, mais sans curseur :
+  // les lettres arrivent en mouvement, pas sous une frappe.
+  const cascade = mountRenderer();
+  cascade.renderer.render(section({ animation: 'cascade' }));
+  assert.strictEqual(parts(cascade.root).line.querySelector('.text-cursor'), null);
 });
 
 // --- Enchaînement entrée → effet --------------------------------------------
@@ -250,6 +270,53 @@ check('align, verticalAlign et marquee posent leurs classes', () => {
   assert.ok(stage.classList.contains('align-left'));
   assert.ok(stage.classList.contains('valign-bottom'));
   assert.ok(stage.classList.contains('has-marquee'), 'le marquee élargit le bloc à toute la scène');
+});
+
+/**
+ * Le maillon que ne couvre pas text-config.test.cjs.
+ *
+ * Ce dernier vérifie qu'une variante Rust figure bien dans les deux JS ; il ne
+ * dit rien de la feuille de style. Une entrée acceptée par `oneOf` mais sans
+ * règle CSS poserait sa classe et ne bougerait pas — un texte inerte, sans la
+ * moindre erreur en console. On remonte donc jusqu'aux règles.
+ */
+check('chaque animation proposée pose sa classe ET a sa règle CSS', () => {
+  const partial = fs.readFileSync(`${TPL_DIR}/partials/_text_render.html`, 'utf8');
+  const listed = (name) =>
+    new RegExp(`const ${name} = \\[([^\\]]*)\\]`).exec(partial)[1]
+      .split(',')
+      .map((v) => v.trim().replace(/^'|'$/g, ''))
+      .filter(Boolean);
+
+  for (const animation of listed('ENTRANCES')) {
+    const { renderer, root } = mountRenderer();
+    renderer.render(section({ animation }));
+    assert.ok(
+      parts(root).line.classList.contains(`anim-${animation}`),
+      `${animation} devrait poser anim-${animation}`
+    );
+    assert.ok(
+      new RegExp(`\\.anim-${animation}[\\s.{]`).test(partial),
+      `anim-${animation} n'a aucune règle CSS : le texte resterait immobile`
+    );
+  }
+
+  for (const effect of listed('EFFECTS')) {
+    // `runTimers` : l'effet n'est posé qu'à la fin de l'entrée, et `section()`
+    // part sans entrée — le minuteur est donc déjà écoulé, mais on le force pour
+    // ne pas dépendre de ce détail.
+    const { renderer, root, runTimers } = mountRenderer();
+    renderer.render(section({ effect }));
+    runTimers();
+    assert.ok(
+      parts(root).content.classList.contains(`fx-${effect}`),
+      `${effect} devrait poser fx-${effect}`
+    );
+    assert.ok(
+      new RegExp(`\\.fx-${effect}[\\s.,{+]`).test(partial),
+      `fx-${effect} n'a aucune règle CSS : le texte resterait immobile`
+    );
+  }
 });
 
 check('une valeur inconnue retombe sur le défaut', () => {

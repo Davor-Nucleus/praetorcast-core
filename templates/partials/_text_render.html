@@ -78,9 +78,9 @@
     .text-stage.align-center .text-content { text-align: center; }
     .text-stage.align-right  .text-content { text-align: right; }
 
-    /* Découpage par lettre — nécessaire à `typewriter` et à `wave`, inutile
-       ailleurs (voir `needsChars` dans le script). `pre` conserve les espaces,
-       qui deviennent des spans comme les autres. */
+    /* Découpage par lettre — nécessaire à `typewriter`, `cascade` et `wave`,
+       inutile ailleurs (voir `needsChars` dans le script). `pre` conserve les
+       espaces, qui deviennent des spans comme les autres. */
     .text-char {
         display: inline-block;
         white-space: pre;
@@ -99,6 +99,53 @@
     @keyframes text-zoom  { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
     @keyframes text-flip  { from { opacity: 0; transform: perspective(1200px) rotateX(90deg); } to { opacity: 1; transform: perspective(1200px) rotateX(0); } }
 
+    /* Entrées « avec ressort ». Les trois dépassent leur état final avant de s'y
+       caler : `bounce` par l'échelle, `drop` et `swing` par la position. Le
+       dépassement est écrit dans les keyframes plutôt que confié à une courbe
+       élastique — une durée réglable de 50 ms à 20 s garde ainsi le même geste. */
+    .text-line.anim-bounce { animation: text-bounce var(--text-anim-ms, 800ms) cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .text-line.anim-drop   { animation: text-drop   var(--text-anim-ms, 800ms) cubic-bezier(0.3, 0.8, 0.4, 1) both; }
+    .text-line.anim-blur   { animation: text-blur   var(--text-anim-ms, 800ms) ease-out both; }
+
+    /* Le pivot part du bord supérieur : posé au centre, le balancement ressemble
+       à une simple rotation au lieu d'une pancarte qu'on lâche. */
+    .text-line.anim-swing {
+        transform-origin: top center;
+        animation: text-swing var(--text-anim-ms, 800ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    @keyframes text-bounce {
+        0%   { opacity: 0; transform: scale(0.4); }
+        45%  { opacity: 1; transform: scale(1.1); }
+        70%  { transform: scale(0.94); }
+        86%  { transform: scale(1.03); }
+        100% { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes text-drop {
+        0%   { opacity: 0; transform: translateY(-140%); }
+        55%  { opacity: 1; transform: translateY(0); }
+        72%  { transform: translateY(-18%); }
+        88%  { transform: translateY(0); }
+        94%  { transform: translateY(-6%); }
+        100% { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes text-swing {
+        0%   { opacity: 0; transform: rotate(-14deg) translateY(-45%); }
+        55%  { opacity: 1; transform: rotate(7deg) translateY(0); }
+        78%  { transform: rotate(-3deg); }
+        92%  { transform: rotate(1.2deg); }
+        100% { opacity: 1; transform: rotate(0); }
+    }
+
+    /* `blur()` en `em` : le flou suit l'échelle du texte, là où une valeur en px
+       serait imperceptible sur un titre et illisible sur une ligne fine. */
+    @keyframes text-blur {
+        from { opacity: 0; filter: blur(0.28em); transform: scale(1.06); }
+        to   { opacity: 1; filter: blur(0);      transform: scale(1); }
+    }
+
     /* Machine à écrire : chaque lettre bascule à son tour, l'ensemble tenant dans
        `--text-anim-ms`. Le pas est calculé en CSS (`/ var(--char-count)`) plutôt
        qu'écrit lettre par lettre en JS — un seul style inline suffit alors. */
@@ -106,6 +153,22 @@
         opacity: 0;
         animation: text-fade 1ms linear both;
         animation-delay: calc(var(--char-index) * (var(--text-anim-ms, 800ms) / var(--char-count, 1)));
+    }
+
+    /* Cascade : même dévoilement lettre à lettre, mais chacune est animée au lieu
+       d'apparaître d'un coup. La durée d'une lettre et le pas valent chacun la
+       moitié de `--text-anim-ms` : la dernière démarre à mi-parcours et finit
+       avec le total, comme le typewriter — ce que suppose le minuteur qui lance
+       l'effet continu (cf. script). */
+    .text-line.anim-cascade .text-char {
+        opacity: 0;
+        animation: text-cascade calc(var(--text-anim-ms, 800ms) / 2) cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: calc(var(--char-index) * (var(--text-anim-ms, 800ms) / var(--char-count, 1) / 2));
+    }
+
+    @keyframes text-cascade {
+        from { opacity: 0; transform: translateY(0.6em) scale(0.85); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
     }
 
     .text-cursor {
@@ -119,7 +182,8 @@
         animation: text-caret 1s steps(1, end) infinite;
     }
 
-    .fx-gradient + .text-cursor { background: var(--pc-accent); }
+    .fx-gradient + .text-cursor,
+    .fx-rainbow + .text-cursor { background: var(--pc-accent); }
 
     @keyframes text-caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 
@@ -221,6 +285,63 @@
         96%           { clip-path: inset(70% 0 8% 0);  transform: translate(-0.03em, 0); }
     }
 
+    /* Les trois effets de mouvement. Amplitudes en `em` pour suivre l'échelle du
+       texte, et volontairement basses : une incrustation qui bouge trop attire
+       l'œil au détriment de la scène. */
+    .text-content.fx-float { animation: text-float var(--text-effect-ms, 2000ms) ease-in-out infinite; }
+    .text-content.fx-tilt  { animation: text-tilt  var(--text-effect-ms, 2000ms) ease-in-out infinite; }
+    .text-content.fx-shake { animation: text-shake var(--text-effect-ms, 2000ms) linear infinite; }
+
+    @keyframes text-float {
+        0%, 100% { transform: translateY(-0.1em); }
+        50%      { transform: translateY(0.1em); }
+    }
+
+    @keyframes text-tilt {
+        0%, 100% { transform: rotate(-2.4deg); }
+        50%      { transform: rotate(2.4deg); }
+    }
+
+    @keyframes text-shake {
+        0%, 100% { transform: translate(0, 0) rotate(0); }
+        20%      { transform: translate(-0.03em, 0.02em) rotate(-0.6deg); }
+        40%      { transform: translate(0.035em, -0.025em) rotate(0.7deg); }
+        60%      { transform: translate(-0.025em, -0.03em) rotate(-0.45deg); }
+        80%      { transform: translate(0.03em, 0.03em) rotate(0.5deg); }
+    }
+
+    /* Néon : le halo remplace `--pc-shadow` le temps de l'effet — deux `text-shadow`
+       ne se cumulent pas, c'est l'animation qui l'emporte. Les teintes viennent du
+       thème, l'effet suit donc l'habillage choisi dans /settings. */
+    .text-content.fx-neon { animation: text-neon var(--text-effect-ms, 2000ms) ease-in-out infinite; }
+
+    @keyframes text-neon {
+        0%, 100% { text-shadow: 0 0 0.06em var(--pc-accent), 0 0 0.24em var(--pc-accent); }
+        50%      { text-shadow: 0 0 0.14em var(--pc-accent), 0 0 0.6em var(--pc-accent), 0 0 1.1em var(--pc-accent-2, var(--pc-accent)); }
+    }
+
+    /* Arc-en-ciel : même mécanique que `fx-gradient` (dégradé découpé sur le
+       texte), mais avec ses propres teintes plutôt que celles du thème. Un
+       `hue-rotate()` serait plus court et sans effet — il ne fait rien sur un
+       texte blanc, qui est le défaut. */
+    .text-content.fx-rainbow {
+        background: linear-gradient(90deg,
+            #ff4d4d, #ff9a2e, #ffe14d, #4dff88, #35d9ff, #6a7bff, #d24dff, #ff4d4d);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        background-size: 200% auto;
+        animation: text-rainbow var(--text-effect-ms, 2000ms) linear infinite;
+    }
+
+    /* Défile toujours dans le même sens (pas d'aller-retour comme `fx-gradient`) :
+       le dégradé boucle sur la même teinte aux deux bouts, la reprise est donc
+       invisible. */
+    @keyframes text-rainbow {
+        from { background-position: 0% 50%; }
+        to   { background-position: -200% 50%; }
+    }
+
     /* Une source OBS ne clignote jamais malgré la préférence système, mais un
        aperçu ouvert dans le navigateur du streamer, si. */
     @media (prefers-reduced-motion: reduce) {
@@ -252,10 +373,20 @@
      *    d'emblée écraserait le dévoilement lettre à lettre du typewriter.
      */
     function createTextRenderer(root) {
-        const ENTRANCES = ['fade', 'slide', 'zoom', 'flip', 'typewriter'];
-        const EFFECTS = ['marquee', 'pulse', 'wave', 'glitch', 'gradient'];
+        const ENTRANCES = ['fade', 'slide', 'zoom', 'flip', 'bounce', 'drop', 'swing', 'blur', 'typewriter', 'cascade'];
+        const EFFECTS = ['marquee', 'pulse', 'wave', 'glitch', 'gradient', 'float', 'tilt', 'shake', 'neon', 'rainbow'];
         const ALIGNS = ['left', 'center', 'right'];
         const VALIGNS = ['top', 'middle', 'bottom'];
+
+        /** Animations qui adressent chaque lettre séparément — les seules à imposer
+         *  le découpage en spans. Partout ailleurs un nœud texte simple suffit, et
+         *  se coupe correctement en fin de ligne. */
+        const PER_CHAR_ENTRANCES = ['typewriter', 'cascade'];
+        const PER_CHAR_EFFECTS = ['wave'];
+
+        function needsChars(animation, effect) {
+            return PER_CHAR_ENTRANCES.includes(animation) || PER_CHAR_EFFECTS.includes(effect);
+        }
 
         /** Champs qui changent le rendu. Un champ absent d'ici ne provoque pas de
          *  reconstruction : `label` et `order` ne se voient pas dans l'overlay. */
@@ -334,10 +465,7 @@
             // `data-text` alimente les deux copies du glitch (content: attr(...)).
             el.setAttribute('data-text', content);
 
-            // Le découpage sert au dévoilement du typewriter et à l'ondulation de
-            // wave ; partout ailleurs un simple nœud texte suffit et se coupe
-            // correctement en fin de ligne.
-            if (animation === 'typewriter' || effect === 'wave') {
+            if (needsChars(animation, effect)) {
                 fillChars(el, content);
             } else {
                 el.textContent = content;

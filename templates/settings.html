@@ -294,7 +294,8 @@
 </head>
 <body>
     <div class="page-container">
-        {% call ui::header("Paramètres", "Configurer PraetorCast sans éditer env.json à la main", "saveAll()", "Enregistrer") %}
+        {# Pas d'URL d'affichage : cette page n'a pas de source OBS correspondante. #}
+        {% call ui::header("Paramètres", "Configurer PraetorCast sans éditer env.json à la main", "saveAll()", "Enregistrer", "") %}
 
         <p class="status" id="status"></p>
 

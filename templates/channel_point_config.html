@@ -265,6 +265,50 @@
             color: var(--text-muted);
         }
 
+        /* Ligne « Tester » : le bouton et le retour du serveur sur la même base que les
+           champs au-dessus, pour ne pas ressembler à une action de la carte entière. */
+        .test-row {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            margin-top: var(--spacing-sm);
+        }
+
+        .btn-test {
+            padding: var(--spacing-sm) var(--spacing-md);
+            border: 1px solid var(--accent-primary);
+            border-radius: var(--radius-md);
+            background: transparent;
+            color: var(--accent-glow);
+            font-family: inherit;
+            font-size: 0.8rem;
+            font-weight: 700;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .btn-test:hover {
+            background-color: rgba(59, 130, 246, 0.15);
+        }
+
+        .btn-test:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+        .test-status {
+            font-size: 0.7rem;
+            line-height: 1.35;
+            color: var(--text-muted);
+        }
+
+        /* Un test parti sans destinataire : la cause la plus fréquente d'un « rien ne
+           se passe », donc signalée autrement qu'un succès. */
+        .test-status.is-warning {
+            color: #fbbf24;
+        }
+
         .controls-right {
             display: flex;
             flex-direction: column;
@@ -316,7 +360,7 @@
 <body>
     <div class="page-container">
 
-        {% call ui::header("Configuration des Points de Chaîne", "Gérer les récompenses de points de chaîne Twitch" , "saveConfig()", "Sauvegarder") %}
+        {% call ui::header("Configuration des Points de Chaîne", "Gérer les récompenses de points de chaîne Twitch" , "saveConfig()", "Sauvegarder", "/channel-points") %}
 
         <div class="card-list" id="cardList">
             <!-- Les récompenses seront ajoutées dynamiquement -->
@@ -455,6 +499,11 @@
                                 ${renderTransitionOptions(reward.transition)}
                             </select>
                         </div>
+
+                        <div class="test-row">
+                            <button id="test-${index}" class="btn-test" onclick="testCard(${index})">▶ Tester dans OBS</button>
+                            <span class="test-status" id="testStatus-${index}">Joue cette ligne dans les sources <code>/channel-points</code> ouvertes, sans attendre l'événement Twitch. Les modifications non enregistrées sont prises en compte.</span>
+                        </div>
                     </div>
 
                     <div class="controls-right">
@@ -580,6 +629,55 @@
             } catch (error) {
                 console.error('Error uploading sound:', error);
                 alert('Error uploading sound');
+            }
+        }
+
+        function setTestStatus(index, message, isWarning) {
+            const status = document.getElementById('testStatus-' + index);
+            if (!status) return;
+            status.textContent = message;
+            status.classList.toggle('is-warning', isWarning === true);
+        }
+
+        // Envoie la ligne telle qu'elle est **affichée** : c'est ce qui permet d'essayer
+        // une phrase ou un son avant d'enregistrer. Le serveur en déduit un événement
+        // représentatif (montant du palier, nom fictif) et le diffuse aux overlays, qui
+        // ne distinguent pas ce message d'une vraie alerte.
+        async function testCard(index) {
+            const reward = rewards[index];
+            if (!reward) return;
+
+            const button = document.getElementById('test-' + index);
+            if (button) button.disabled = true;
+            setTestStatus(index, 'Envoi...');
+
+            try {
+                const response = await fetch('/api/channel-points/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(reward)
+                });
+
+                if (!response.ok) {
+                    setTestStatus(index, 'Échec de l\'envoi (HTTP ' + response.status + ')', true);
+                    return;
+                }
+
+                const data = await response.json();
+                if (data.overlays > 0) {
+                    setTestStatus(index, 'Envoyé à ' + data.overlays + (data.overlays > 1 ? ' sources' : ' source') + '.');
+                } else {
+                    // Le cas à expliquer : le serveur a bien reçu le test, mais personne
+                    // ne l'affiche. Ouvrir /channel-points suffit.
+                    setTestStatus(index, 'Aucune source /channel-points ouverte : rien à afficher.', true);
+                }
+            } catch (error) {
+                console.error('Error testing alert:', error);
+                setTestStatus(index, 'Échec de l\'envoi : ' + error, true);
+            } finally {
+                if (button) button.disabled = false;
             }
         }
 

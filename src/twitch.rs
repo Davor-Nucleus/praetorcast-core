@@ -33,6 +33,56 @@ pub struct AlertEvent {
     pub months: u64,
 }
 
+impl AlertEvent {
+    /// Événement synthétique pour le bouton « Tester » du configurateur.
+    ///
+    /// `amount` reprend le palier de la ligne testée quand elle en a un : un palier
+    /// « ≥ 1000 bits » doit s'annoncer avec 1000, sinon l'aperçu n'exerce pas la phrase
+    /// telle qu'elle jouera en direct. Sans palier (points de chaîne, Prime, ligne à 0)
+    /// un montant représentatif du type prend le relais, pour qu'un jeton `amount` ne
+    /// s'affiche pas vide — ce qui laisserait croire à une phrase mal écrite.
+    pub fn sample(kind: AlertKind, reward_title: &str, min_amount: u64) -> Self {
+        let amount = match (min_amount, kind) {
+            (0, AlertKind::Sub | AlertKind::Resub | AlertKind::Prime) => 1000,
+            (0, AlertKind::Gift) => 5,
+            (0, AlertKind::Cheer) => 100,
+            (0, AlertKind::Raid) => 10,
+            (0, AlertKind::ChannelPoints) => 0,
+            (palier, _) => palier,
+        };
+
+        Self {
+            kind,
+            // Seuls les points de chaîne portent un titre, comme dans un vrai
+            // événement — et une ligne dont le titre n'est pas encore saisi doit
+            // quand même montrer quelque chose à la place du jeton `reward`.
+            reward_title: match kind {
+                AlertKind::ChannelPoints if reward_title.is_empty() => {
+                    "Récompense de test".to_string()
+                }
+                AlertKind::ChannelPoints => reward_title.to_string(),
+                _ => String::new(),
+            },
+            user_name: "TestUser".to_string(),
+            // Ce que le spectateur aurait écrit. Seuls les types qui portent un message
+            // en direct en reçoivent un ici : un raid n'en a jamais.
+            user_input: match kind {
+                AlertKind::Cheer | AlertKind::Resub | AlertKind::Prime => {
+                    "Message de test".to_string()
+                }
+                _ => String::new(),
+            },
+            amount,
+            // Les mois cumulés ne concernent que les renouvellements — un Prime en a
+            // aussi dès le deuxième mois.
+            months: match kind {
+                AlertKind::Resub | AlertKind::Prime => 12,
+                _ => 0,
+            },
+        }
+    }
+}
+
 pub struct TwitchState {
     pub total_followers: u64,
     pub last_follower: Option<String>,
@@ -683,6 +733,62 @@ mod tests {
             alert_from("channel.chat.notification", &event).unwrap().user_name,
             "Anonyme"
         );
+    }
+
+    // ── Événement de test du configurateur ──────────────────────────────────────
+
+    #[test]
+    fn un_test_reprend_le_palier_de_la_ligne() {
+        // Sans ça, tester un palier « ≥ 5000 bits » annoncerait 100 bits : la phrase
+        // affichée ne serait pas celle qui jouera en direct.
+        let event = AlertEvent::sample(AlertKind::Cheer, "", 5000);
+        assert_eq!(event.kind, AlertKind::Cheer);
+        assert_eq!(event.amount, 5000);
+    }
+
+    #[test]
+    fn un_test_sans_palier_prend_un_montant_representatif() {
+        // Une ligne à 0 attrape tout : il faut bien choisir un montant, et 0 laisserait
+        // le jeton `amount` vide dans l'aperçu.
+        assert_eq!(AlertEvent::sample(AlertKind::Cheer, "", 0).amount, 100);
+        assert_eq!(AlertEvent::sample(AlertKind::Raid, "", 0).amount, 10);
+        assert_eq!(AlertEvent::sample(AlertKind::Gift, "", 0).amount, 5);
+        // Un abonnement sans palier vaut tier 1, comme un Prime.
+        assert_eq!(AlertEvent::sample(AlertKind::Sub, "", 0).amount, 1000);
+        assert_eq!(AlertEvent::sample(AlertKind::Prime, "", 0).amount, 1000);
+    }
+
+    #[test]
+    fn un_test_de_recompense_garde_son_titre_ou_en_invente_un() {
+        let event = AlertEvent::sample(AlertKind::ChannelPoints, "Un cookie ?!", 0);
+        assert_eq!(event.reward_title, "Un cookie ?!");
+        assert_eq!(event.amount, 0);
+
+        // Une ligne dont le titre n'est pas encore saisi doit rester testable.
+        assert_eq!(
+            AlertEvent::sample(AlertKind::ChannelPoints, "", 0).reward_title,
+            "Récompense de test"
+        );
+
+        // Les autres types n'en portent pas, exactement comme un vrai événement :
+        // un jeton `reward` dans une phrase de cheer ne doit pas inventer de titre.
+        assert!(AlertEvent::sample(AlertKind::Cheer, "", 100).reward_title.is_empty());
+    }
+
+    #[test]
+    fn seuls_les_types_concernes_remplissent_mois_et_message() {
+        let resub = AlertEvent::sample(AlertKind::Resub, "", 0);
+        assert_eq!(resub.months, 12);
+        assert_eq!(resub.user_input, "Message de test");
+
+        let raid = AlertEvent::sample(AlertKind::Raid, "", 0);
+        assert_eq!(raid.months, 0);
+        assert!(raid.user_input.is_empty());
+
+        // Un premier abonnement payant n'a ni mois cumulés ni message.
+        let sub = AlertEvent::sample(AlertKind::Sub, "", 0);
+        assert_eq!(sub.months, 0);
+        assert!(sub.user_input.is_empty());
     }
 
     #[test]

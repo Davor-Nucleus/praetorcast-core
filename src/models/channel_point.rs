@@ -126,6 +126,18 @@ fn normalize_path(path: &str) -> String {
     }
 }
 
+/// Applique à une ligne les mêmes corrections de chemin que `read` fait sur le
+/// fichier.
+///
+/// Le bouton « Tester » du configurateur envoie la ligne **affichée**, enregistrée ou
+/// non : sans ce passage, un chemin encore sous sa forme courte (`son.mp3`) jouerait
+/// dans l'aperçu autrement qu'en direct.
+pub fn normalized(mut alert: Alert) -> Alert {
+    alert.image_path = normalize_path(&alert.image_path);
+    alert.sound_path = normalize_path(&alert.sound_path);
+    alert
+}
+
 pub fn read() -> Result<Vec<Alert>, String> {
     let content = match fs::read_to_string("data/channel_points.json") {
         Ok(c) => c,
@@ -143,11 +155,7 @@ pub fn read() -> Result<Vec<Alert>, String> {
     };
     let rewards: Vec<Alert> = serde_json::from_str(&content)
         .map_err(|e| format!("Error parsing channel_points.json: {}", e))?;
-    Ok(rewards.into_iter().map(|mut c| {
-        c.image_path = normalize_path(&c.image_path);
-        c.sound_path = normalize_path(&c.sound_path);
-        c
-    }).collect())
+    Ok(rewards.into_iter().map(normalized).collect())
 }
 
 pub fn write(rewards: Vec<Alert>) -> Result<(), String> {

@@ -1,4 +1,4 @@
-{%- macro header(title, subtitle, save_action, save_label) -%}
+{%- macro header(title, subtitle, save_action, save_label, display_url) -%}
 
 <header class="page-header">
     <div>
@@ -12,10 +12,59 @@
 
     <div style="display: flex; gap: 1rem; align-items: center;">
         <a href="/" class="home-link">Retour à l'accueil</a>
+        {%- if display_url != "" %}
+        <button type="button" class="btn-copy-link" data-display-url="{{ display_url }}"
+                title="Copier l'URL de la page d'affichage, à coller dans une source navigateur OBS">
+            Copier le lien
+        </button>
+        {%- endif %}
         {%- if save_action != "" && save_label != "" %}
         <button onclick="{{save_action}}" class="btn btn-save">{{save_label}}</button>
         {%- endif %}
     </div>
 </header>
+{%- if display_url != "" %}
+
+<script>
+    // Bouton « Copier le lien » : donne l'URL absolue de la page d'affichage
+    // correspondante, celle qui se colle dans une source navigateur OBS.
+    //
+    // Le script est émis avec le bouton plutôt que servi depuis /public/js : les
+    // templates sont compilés dans le binaire, un fichier statique demanderait d'être
+    // recopié à la racine à chaque déploiement — pour vingt lignes qui ne bougeront pas.
+    (function () {
+        var button = document.querySelector('.btn-copy-link');
+        if (!button) return;
+
+        var label = button.textContent.trim();
+        var restore = null;
+
+        button.addEventListener('click', function () {
+            // Résolu contre l'origine courante : la page ouverte sur 127.0.0.1 doit
+            // donner un lien en 127.0.0.1, celle ouverte sur localhost en localhost.
+            var url = new URL(button.dataset.displayUrl, location.origin).href;
+
+            var done = function () {
+                button.textContent = 'Lien copié';
+                clearTimeout(restore);
+                restore = setTimeout(function () { button.textContent = label; }, 1500);
+            };
+
+            // `navigator.clipboard` n'existe pas hors contexte sécurisé, et l'écriture
+            // peut être refusée : dans les deux cas l'URL reste sélectionnable à la main
+            // plutôt que perdue.
+            if (!navigator.clipboard) {
+                window.prompt('Copiez le lien :', url);
+                return;
+            }
+
+            navigator.clipboard.writeText(url).then(done, function (error) {
+                console.error('Presse-papiers indisponible:', error);
+                window.prompt('Copiez le lien :', url);
+            });
+        });
+    })();
+</script>
+{%- endif %}
 
 {%- endmacro %}

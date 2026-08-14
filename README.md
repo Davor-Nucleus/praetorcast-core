@@ -24,6 +24,8 @@ Ce projet est un serveur web en Rust utilisant **Actix-web** et **Askama** (temp
 - **Musique & soundboard** — page de configuration avec raccourcis clavier et intégration MPD.
 - **Twitch EventSub** — connexion WebSocket persistante avec reconnexion automatique : followers, points de chaîne, abonnements, bits, raids, début/fin de direct.
 - **Alertes d'événements** — image, son et phrase par type d'événement, avec paliers par montant (un cheer de 5 000 bits ≠ un cheer de 50). Les abonnements **Prime** ont leur propre déclencheur, distinct du tier 1 payant.
+- **Test d'alerte en un clic** — chaque ligne du configurateur a son bouton « Tester dans OBS » : l'alerte joue dans les sources ouvertes, sans attendre l'événement Twitch et sans enregistrer au préalable.
+- **Lien d'affichage copiable** — le bandeau de chaque page de configuration copie l'URL de l'overlay correspondant, prête à coller dans une source navigateur OBS.
 - **Timer subathon** — barème événement → temps réglable ; les écritures du compte à rebours sont sérialisées pour qu'un ajout automatique et un clic manuel s'additionnent.
 - **Temps réel** — WebSockets pour pousser bannière, état Twitch, channel points et limiteur vers les overlays sans rafraîchissement.
 - **Uploads de médias** — images et sons envoyés depuis l'interface, stockés avec un nom UUID.
@@ -131,12 +133,21 @@ Le serveur lit la configuration depuis `env.json` à la racine du projet (créé
 <details>
 <summary><b>Pages de configuration</b></summary>
 
-| Route | Description |
-|-------|-------------|
-| `GET /music-config` | Config musique / soundboard / limiteur OBS |
-| `GET /banner-config` | Config des cartes de bannière |
-| `GET /text-config` | Config des textes animés et de leurs URLs |
-| `GET /scheduler` | Éditeur de planning hebdomadaire |
+| Route | Description | Lien copiable |
+|-------|-------------|---------------|
+| `GET /music-config` | Config musique / soundboard / limiteur OBS | `/music-current` |
+| `GET /banner-config` | Config des cartes de bannière | `/banner` |
+| `GET /text-config` | Config des textes animés et de leurs URLs | une par section |
+| `GET /channel-points-config` | Config des alertes, avec test par ligne | `/channel-points` |
+| `GET /goal-config` | Config des barres d'objectif | `/goal` |
+| `GET /timer-config` | Réglage et pilotage du compte à rebours | `/timer` |
+| `GET /scheduler` | Éditeur de planning hebdomadaire | `/scheduler` |
+| `GET /settings` | Édition d'`env.json` et du thème | — |
+
+La dernière colonne est ce que copie le bouton **Copier le lien** du bandeau : l'URL de la
+page d'affichage à coller dans une source navigateur OBS. `/text-config` fait exception,
+chaque section y ayant sa propre URL (`/text?name=…`), copiable sur sa carte ; `/settings`
+n'a pas de source OBS correspondante.
 </details>
 
 <details>
@@ -163,6 +174,20 @@ Le serveur lit la configuration depuis `env.json` à la racine du projet (créé
 - `GET/POST /api/obs/limiter/subtract` (-1 dB)
 - `GET /api/obs/limiter/toggle`
 
+**Alertes**
+- `GET /api/channel-points-config`, `POST /api/channel-points-config`
+- `POST /api/channel-points-upload-image`, `POST /api/channel-points-upload-sound`
+- `POST /api/channel-points/test` — corps : **une ligne** de `channel_points.json`, telle
+  que le configurateur la tient en mémoire. Réponse : `{ "success": true, "overlays": n }`,
+  `n` étant le nombre de sources `/channel-points` qui l'ont reçue — `0` signifie
+  qu'aucune n'est ouverte, seule explication d'un test resté sans effet.
+
+Le corps porte la ligne au lieu d'un identifiant : c'est ce qui permet de tester une phrase
+ou un son **avant** d'enregistrer. Le serveur en déduit un événement représentatif (montant
+du palier de la ligne, `TestUser`, mois cumulés pour un réabonnement) et le diffuse sur un
+canal distinct de celui des vraies alertes — sans quoi un cheer de test rallongerait le
+compte à rebours du subathon.
+
 **Objectifs** — paramètres dans l'URL et double verbe, comme le compte à rebours : un bouton
 de Stream Deck ne sait faire qu'un GET.
 - `GET /api/goal-config`, `POST /api/goal-config`
@@ -186,7 +211,7 @@ Plusieurs WebSockets poussent les changements en temps réel vers les overlays O
 | `/api/text_ws` | Configuration des textes (toutes les sections) | Sur changement (max 1s) |
 | `/api/twitch_ws` | État Twitch : `{ total_followers, last_follower, connected, live, streamStartedAt }` | Sur changement (max 500ms) |
 | `/api/obs/limiter_ws` | État du limiteur : `{ enabled, threshold }` (ou `null`) | Sur changement (max 1s) |
-| `/api/channel_point_ws` | Alerte déjà résolue : `{ type: "alert", event, config }` | À l'événement |
+| `/api/channel_point_ws` | Alerte déjà résolue : `{ type: "alert", event, config }` | À l'événement, et au clic sur « Tester » |
 
 ---
 
@@ -259,11 +284,16 @@ Le module `twitch.rs` se connecte en **WebSocket** à l'EventSub API Twitch
   dédoublonné — c'est une clé d'URL, deux homonymes rendraient l'un des deux
   inatteignable.
 - **Deux animations cumulables**, deux réglages distincts :
-  - *entrée*, jouée une fois — `fade`, `slide`, `zoom`, `flip`, `typewriter` ;
-  - *effet continu*, en boucle — `marquee`, `pulse`, `wave`, `glitch`, `gradient`.
+  - *entrée*, jouée une fois — `fade`, `slide`, `zoom`, `flip`, `bounce`, `drop`,
+    `swing`, `blur`, `typewriter`, `cascade` ;
+  - *effet continu*, en boucle — `marquee`, `pulse`, `wave`, `glitch`, `gradient`,
+    `float`, `tilt`, `shake`, `neon`, `rainbow`.
 
   L'effet ne démarre qu'à la fin de l'entrée : les deux animent `transform`, et un
   `wave` posé d'emblée écraserait le dévoilement lettre à lettre du `typewriter`.
+  `typewriter` et `cascade` (comme `wave`) découpent le texte en un span par
+  lettre ; les autres gardent un nœud texte simple, qui se coupe mieux en fin de
+  ligne.
 - **Fond transparent par défaut**, contrairement à `/banner` qui est plein écran sur
   noir : cette page est une incrustation. Taille, couleur, alignement, position
   verticale et couleur de fond se règlent par section.
@@ -308,7 +338,7 @@ Le module `twitch.rs` se connecte en **WebSocket** à l'EventSub API Twitch
 
 ## 🧪 Tests
 
-### Rust — **114 tests**
+### Rust — **144 tests**
 
 Intégrés directement dans les fichiers sources (`#[cfg(test)] mod tests`).
 
@@ -325,7 +355,7 @@ cargo test models::config
 > [!TIP]
 > Les tests sont isolés du code de production : ils ne sont compilés qu'avec `cargo test`, pas en `cargo build`.
 
-### Overlays et pages de configuration (JavaScript) — **83 assertions**
+### Overlays et pages de configuration (JavaScript) — **157 assertions**
 
 ```sh
 node tests/js/run.cjs
@@ -344,6 +374,11 @@ texte contient « CLEARCHAT » doit s'afficher au lieu de vider l'overlay, et un
 dans le chat ne doit pas emporter la trame. C'est la seule suite qui charge un script
 externe (`public/js/chat-common.js`) : elle le concatène au bloc inline du template dans le
 même contexte, puisque les deux moitiés partagent leurs variables.
+
+`copy-link.test.cjs` est la seule suite qui lit un **partiel** (`partials/_macros.html`) :
+le bouton « Copier le lien » y est défini une fois pour six pages de configuration, et le
+macro n'est développé qu'à la compilation — aucune suite de page ne verrait donc une
+régression sur ce code partagé.
 
 Aucune dépendance à installer : `tests/js/dom-stub.cjs` fournit le minimum de DOM
 utilisé par les templates, et chaque suite charge le `<script>` **depuis le fichier

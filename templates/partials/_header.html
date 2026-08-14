@@ -35,3 +35,24 @@
 .home-link:hover {
     color: var(--text-main);
 }
+
+/* Repli sur chaque variable : `music_config.html` inclut ce fichier sans définir la
+   palette des autres pages de configuration. */
+.btn-copy-link {
+    padding: 0.5rem 0.9rem;
+    border: 1px solid var(--border-light, rgba(255, 255, 255, 0.2));
+    border-radius: var(--radius-md, 0.375rem);
+    background: transparent;
+    color: var(--text-muted, #a0a0a0);
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.btn-copy-link:hover {
+    color: var(--accent-glow, #7aa2f7);
+    border-color: var(--accent-glow, #7aa2f7);
+}

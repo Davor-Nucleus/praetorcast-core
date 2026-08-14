@@ -24,8 +24,19 @@ pub enum TextAnimation {
     Slide,
     Zoom,
     Flip,
+    /// Arrivée élastique : le texte dépasse sa taille finale puis se cale.
+    Bounce,
+    /// Chute depuis le haut, avec un léger dépassement à l'atterrissage.
+    Drop,
+    /// Pivot autour du bord supérieur, comme une pancarte qu'on lâche.
+    Swing,
+    /// Mise au point : le texte se précise depuis un flou.
+    Blur,
     /// Machine à écrire : les caractères s'affichent un à un.
     Typewriter,
+    /// Cascade : les lettres montent une à une. Comme `Typewriter`, mais chaque
+    /// lettre est animée au lieu d'être simplement dévoilée.
+    Cascade,
 }
 
 /// Animation **continue**, rejouée en boucle tant que le texte est affiché.
@@ -46,6 +57,17 @@ pub enum TextEffect {
     Glitch,
     /// Dégradé du thème (`--pc-gradient`) balayant le texte.
     Gradient,
+    /// Lévitation : le texte monte et descend doucement.
+    Float,
+    /// Balancier : rotation lente d'un bord à l'autre.
+    Tilt,
+    /// Tremblement nerveux, sans repos.
+    Shake,
+    /// Halo pulsant aux couleurs d'accent du thème.
+    Neon,
+    /// Dégradé arc-en-ciel défilant. Distinct de `Gradient`, qui suit le thème :
+    /// celui-ci a ses propres teintes et reste visible quel que soit l'habillage.
+    Rainbow,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -391,5 +413,63 @@ mod tests {
         assert_eq!(json, "\"gradient\"");
         let json = serde_json::to_string(&TextVAlign::Middle).unwrap();
         assert_eq!(json, "\"middle\"");
+        let json = serde_json::to_string(&TextAnimation::Cascade).unwrap();
+        assert_eq!(json, "\"cascade\"");
+        let json = serde_json::to_string(&TextEffect::Rainbow).unwrap();
+        assert_eq!(json, "\"rainbow\"");
+    }
+
+    /// Chaque variante doit se relire telle quelle : c'est ce qui garantit qu'un
+    /// `data/text.json` écrit par le configurateur revient identique après un
+    /// aller-retour, y compris pour les animations ajoutées après coup.
+    #[test]
+    fn test_every_variant_roundtrips() {
+        let entrances = [
+            TextAnimation::None,
+            TextAnimation::Fade,
+            TextAnimation::Slide,
+            TextAnimation::Zoom,
+            TextAnimation::Flip,
+            TextAnimation::Bounce,
+            TextAnimation::Drop,
+            TextAnimation::Swing,
+            TextAnimation::Blur,
+            TextAnimation::Typewriter,
+            TextAnimation::Cascade,
+        ];
+        for animation in entrances {
+            let json = serde_json::to_string(&animation).unwrap();
+            assert!(
+                json.chars().all(|c| c == '"' || c.is_ascii_lowercase()),
+                "{} doit sortir en minuscules — le JS compare des chaînes brutes",
+                json
+            );
+            let back: TextAnimation = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, animation);
+        }
+
+        let effects = [
+            TextEffect::None,
+            TextEffect::Marquee,
+            TextEffect::Pulse,
+            TextEffect::Wave,
+            TextEffect::Glitch,
+            TextEffect::Gradient,
+            TextEffect::Float,
+            TextEffect::Tilt,
+            TextEffect::Shake,
+            TextEffect::Neon,
+            TextEffect::Rainbow,
+        ];
+        for effect in effects {
+            let json = serde_json::to_string(&effect).unwrap();
+            assert!(
+                json.chars().all(|c| c == '"' || c.is_ascii_lowercase()),
+                "{} doit sortir en minuscules — le JS compare des chaînes brutes",
+                json
+            );
+            let back: TextEffect = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, effect);
+        }
     }
 }

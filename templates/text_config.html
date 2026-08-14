@@ -311,7 +311,8 @@
 <body>
     <div class="page-container">
 
-        {% call ui::header("Configuration Textes", "Gérer les textes animés et leurs URLs d'affichage", "saveConfig()", "Sauvegarder") %}
+        {# Pas d'URL globale : chaque section a la sienne (`/text?name=…`), copiable sur sa carte. #}
+        {% call ui::header("Configuration Textes", "Gérer les textes animés et leurs URLs d'affichage", "saveConfig()", "Sauvegarder", "") %}
 
         <div class="preview-panel">
             <div class="preview-stage" id="previewStage">
@@ -343,7 +344,12 @@
             ['slide', 'Glissement'],
             ['zoom', 'Zoom'],
             ['flip', 'Bascule'],
+            ['bounce', 'Rebond'],
+            ['drop', 'Chute'],
+            ['swing', 'Balancement'],
+            ['blur', 'Mise au point'],
             ['typewriter', 'Machine à écrire'],
+            ['cascade', 'Cascade'],
         ];
 
         const EFFECTS = [
@@ -353,6 +359,11 @@
             ['wave', 'Vague'],
             ['glitch', 'Glitch'],
             ['gradient', 'Dégradé animé'],
+            ['float', 'Lévitation'],
+            ['tilt', 'Balancier'],
+            ['shake', 'Tremblement'],
+            ['neon', 'Néon'],
+            ['rainbow', 'Arc-en-ciel'],
         ];
 
         const ALIGNS = [['left', 'Gauche'], ['center', 'Centre'], ['right', 'Droite']];
@@ -371,6 +382,11 @@
             wave: 1200,
             glitch: 2000,
             gradient: 5000,
+            float: 3500,
+            tilt: 3000,
+            shake: 700,
+            neon: 1800,
+            rainbow: 4000,
         };
 
         const DEFAULT_SECTION = {
