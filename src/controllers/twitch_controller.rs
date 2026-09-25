@@ -23,6 +23,73 @@ pub async fn badges() -> impl Responder {
     }
 }
 
+/// État du direct gardé 30 s : chaque dock ouvert le relit à ce rythme, et plusieurs
+/// docks ne doivent pas multiplier les appels Helix.
+const STREAM_TTL: Duration = Duration::from_secs(30);
+
+static STREAM_CACHE: Mutex<Option<(std::time::Instant, Value)>> = Mutex::new(None);
+
+/// GET /api/twitch/stream — le direct selon Twitch : en ligne, début, spectateurs,
+/// titre et catégorie.
+///
+/// Twitch fait foi, plutôt que `TwitchState::live` : ce dernier ne s'apprend qu'au
+/// premier `stream.online`, et reste donc faux après un redémarrage du serveur en
+/// plein direct. Une erreur rend `live: null` — « inconnu », pas « hors ligne ».
+pub async fn stream() -> impl Responder {
+    if let Some((at, cached)) = STREAM_CACHE.lock().unwrap().as_ref() {
+        if at.elapsed() < STREAM_TTL {
+            return HttpResponse::Ok().json(cached);
+        }
+    }
+
+    match fetch_stream().await {
+        Ok(info) => {
+            *STREAM_CACHE.lock().unwrap() = Some((std::time::Instant::now(), info.clone()));
+            HttpResponse::Ok().json(info)
+        }
+        Err(e) => {
+            eprintln!("[Twitch] État du direct indisponible: {e}");
+            HttpResponse::Ok().json(serde_json::json!({ "live": null, "error": e.to_string() }))
+        }
+    }
+}
+
+async fn fetch_stream() -> Result<Value, BoxError> {
+    let twitch = TwitchConfig::from_app(&load_config());
+    let client = reqwest::Client::new();
+    let bid = broadcaster_id(&client, &twitch).await?;
+
+    let response = client
+        .get("https://api.twitch.tv/helix/streams")
+        .query(&[("user_id", bid.as_str())])
+        .header("Client-Id", &twitch.client_id)
+        .header("Authorization", twitch.bearer())
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        return Err(format!("helix/streams a renvoyé HTTP {}", response.status()).into());
+    }
+
+    let body: Value = response.json().await?;
+    Ok(stream_info(&body))
+}
+
+/// Réduit la réponse de `helix/streams` à ce qu'affiche le dock. Hors ligne, Helix
+/// renvoie une liste vide.
+fn stream_info(body: &Value) -> Value {
+    let stream = &body["data"][0];
+    if stream["type"].as_str() != Some("live") {
+        return serde_json::json!({ "live": false });
+    }
+    serde_json::json!({
+        "live": true,
+        "startedAt": stream["started_at"],
+        "viewers": stream["viewer_count"],
+        "title": stream["title"],
+        "game": stream["game_name"],
+    })
+}
+
 /// Emotes gardées une heure : la pluie en demande à chaque chargement de source, et
 /// la liste d'une chaîne ne change qu'avec un nouvel emote.
 const EMOTES_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
@@ -180,6 +247,8 @@ pub async fn ws_handler(
             serde_json::json!({
                 "total_followers": g.total_followers,
                 "last_follower": g.last_follower,
+                // RFC 3339, pour le « il y a 4 min » du dock /followers-info.
+                "lastFollowerAt": g.last_follower_at,
                 "connected": g.connected,
                 // `stream.online` / `stream.offline`. Faux tant qu'aucune
                 // notification n'est arrivée : un serveur lancé en cours de direct
@@ -251,5 +320,34 @@ mod tests {
     #[test]
     fn une_reponse_sans_donnees_ne_donne_aucune_emote() {
         assert!(emote_images(&serde_json::json!({})).is_empty());
+    }
+
+    #[test]
+    fn un_direct_en_cours_donne_debut_spectateurs_titre_et_categorie() {
+        // Forme de la documentation Helix « Get Streams », abrégée.
+        let body = serde_json::json!({
+            "data": [{
+                "id": "123", "user_login": "lordrutra", "game_name": "Warhammer 40,000: Space Marine 2",
+                "type": "live", "title": "Pour l'Empereur !", "viewer_count": 42,
+                "started_at": "2026-09-25T17:00:00Z"
+            }],
+            "pagination": {}
+        });
+        assert_eq!(
+            stream_info(&body),
+            serde_json::json!({
+                "live": true,
+                "startedAt": "2026-09-25T17:00:00Z",
+                "viewers": 42,
+                "title": "Pour l'Empereur !",
+                "game": "Warhammer 40,000: Space Marine 2",
+            })
+        );
+    }
+
+    #[test]
+    fn hors_ligne_helix_rend_une_liste_vide() {
+        let body = serde_json::json!({ "data": [], "pagination": {} });
+        assert_eq!(stream_info(&body), serde_json::json!({ "live": false }));
     }
 }

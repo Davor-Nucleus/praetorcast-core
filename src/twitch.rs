@@ -104,6 +104,9 @@ impl AlertEvent {
 pub struct TwitchState {
     pub total_followers: u64,
     pub last_follower: Option<String>,
+    /// Heure du dernier follow (RFC 3339), pour le « il y a 4 min » de
+    /// `/followers-info`. Lue dans Helix au démarrage, puis dans chaque follow.
+    pub last_follower_at: Option<String>,
     pub connected: bool,
     /// Stream en ligne, d'après `stream.online` / `stream.offline`. Faux au démarrage
     /// tant qu'aucune notification n'est arrivée : le serveur peut être lancé en
@@ -132,6 +135,7 @@ impl Default for TwitchState {
         Self {
             total_followers: 0,
             last_follower: None,
+            last_follower_at: None,
             connected: false,
             live: false,
             stream_started_at: None,
@@ -302,11 +306,12 @@ async fn session(
 ) -> Result<(), BoxError> {
     let bid = broadcaster_id(client, config).await?;
 
-    let (total, last) = followers(client, config, &bid).await?;
+    let latest = followers(client, config, &bid).await?;
     {
         let mut g = state.lock().unwrap();
-        g.total_followers = total;
-        g.last_follower = last;
+        g.total_followers = latest.total;
+        g.last_follower = latest.name;
+        g.last_follower_at = latest.at;
     }
 
     let (mut ws, _) = connect_async(EVENTSUB_URL).await?;
@@ -489,6 +494,7 @@ fn notify(data: &Value, state: &Mutex<TwitchState>) {
                 let mut g = state.lock().unwrap();
                 g.total_followers += 1;
                 g.last_follower = Some(name.clone());
+                g.last_follower_at = event["followed_at"].as_str().map(String::from);
             }
             println!("[Twitch] Nouveau follower: {name}");
             publish(
@@ -808,11 +814,31 @@ pub(crate) async fn subscriber_count(
     Ok(body["total"].as_u64().unwrap_or(0))
 }
 
+/// Total de followers et dernier en date, tels que Helix les donne.
+#[derive(Debug, PartialEq)]
+struct LatestFollower {
+    total: u64,
+    name: Option<String>,
+    /// RFC 3339.
+    at: Option<String>,
+}
+
+/// Lit la réponse de `helix/channels/followers` : triée du plus récent au plus
+/// ancien, la première entrée est le dernier follower.
+fn latest_follower(resp: &Value) -> LatestFollower {
+    let first = &resp["data"][0];
+    LatestFollower {
+        total: resp["total"].as_u64().unwrap_or(0),
+        name: first["user_name"].as_str().map(String::from),
+        at: first["followed_at"].as_str().map(String::from),
+    }
+}
+
 async fn followers(
     client: &Client,
     config: &TwitchConfig,
     broadcaster_id: &str,
-) -> Result<(u64, Option<String>), BoxError> {
+) -> Result<LatestFollower, BoxError> {
     let resp: Value = client
         .get("https://api.twitch.tv/helix/channels/followers")
         .query(&[("broadcaster_id", broadcaster_id), ("first", "1")])
@@ -823,10 +849,7 @@ async fn followers(
         .json()
         .await?;
 
-    Ok((
-        resp["total"].as_u64().unwrap_or(0),
-        resp["data"][0]["user_name"].as_str().map(String::from),
-    ))
+    Ok(latest_follower(&resp))
 }
 
 /// Crée une souscription EventSub sur la session WebSocket en cours.
@@ -1160,6 +1183,47 @@ mod tests {
         handle(&follow, &state, &mut recent).unwrap();
 
         assert_eq!(state.lock().unwrap().total_followers, 1);
+    }
+
+    #[test]
+    fn un_follow_retient_le_nom_et_l_heure() {
+        let state = Mutex::new(TwitchState::default());
+        let mut recent = RecentIds::new(RECENT_IDS);
+        let follow = json!({
+            "metadata": { "message_id": "f2", "message_type": "notification", "subscription_type": "channel.follow" },
+            "payload": { "event": { "user_name": "Ronni", "followed_at": "2026-09-25T18:04:05.123Z" } }
+        });
+
+        handle(&follow, &state, &mut recent).unwrap();
+
+        let g = state.lock().unwrap();
+        assert_eq!(g.last_follower.as_deref(), Some("Ronni"));
+        assert_eq!(g.last_follower_at.as_deref(), Some("2026-09-25T18:04:05.123Z"));
+    }
+
+    #[test]
+    fn le_dernier_follower_est_lu_dans_la_reponse_helix() {
+        // Forme de la documentation « Get Channel Followers », abrégée.
+        let resp = json!({
+            "total": 1234,
+            "data": [
+                { "user_id": "11111", "user_name": "UserDisplayName", "user_login": "userloginname",
+                  "followed_at": "2022-05-24T22:22:08Z" }
+            ],
+            "pagination": {}
+        });
+        assert_eq!(
+            latest_follower(&resp),
+            LatestFollower {
+                total: 1234,
+                name: Some("UserDisplayName".to_string()),
+                at: Some("2022-05-24T22:22:08Z".to_string()),
+            }
+        );
+
+        // Chaîne sans follower : un total à zéro, rien d'autre.
+        let empty = latest_follower(&json!({ "total": 0, "data": [] }));
+        assert_eq!((empty.total, empty.name, empty.at), (0, None, None));
     }
 
     #[test]

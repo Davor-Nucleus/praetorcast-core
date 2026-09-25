@@ -93,6 +93,11 @@ class Element {
     return child;
   }
 
+  /** `append(a, b, …)` : plusieurs nœuds d'un coup (les chaînes ne servent pas ici). */
+  append(...nodes) {
+    for (const node of nodes) this.appendChild(node);
+  }
+
   removeChild(child) {
     const i = this.children.indexOf(child);
     if (i >= 0) this.children.splice(i, 1);

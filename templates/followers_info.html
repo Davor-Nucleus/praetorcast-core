@@ -2,78 +2,730 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Followers Info</title>
-    <!-- Thème commun : police, couleurs et rayons viennent de /settings. -->
-    <link id="pc-theme" rel="stylesheet" href="/theme.css">
-    <script src="/public/js/theme-live.js" defer></script>
     <style>
-        body {
+        /* Dock OBS de surveillance : dernier follower, état du live, stats,
+           objectifs, activité. Pensé pour 220 à 360 px de large, en police 12-13 px :
+           tout doit tenir sans défiler dans un petit dock. Chaque section se replie
+           d'un clic sur son titre (mémorisé dans ce navigateur). */
+        {% include "partials/_dock_base.html" %}
+
+        html, body { font-size: 13px; }
+
+        .dock { gap: 6px; padding: 6px; }
+        .panel { padding: 6px 8px; }
+
+        .muted { color: var(--muted); }
+
+        /* ── Bandeau d'état ────────────────────────────────────────────────── */
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .live-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 1px 7px;
+            border-radius: 999px;
+            background: var(--panel-2);
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #4a5070;
+        }
+
+        .live-pill.is-live { background: rgba(247, 118, 142, 0.18); color: var(--text); }
+        .live-pill.is-live .live-dot { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+
+        .viewers { color: var(--muted); white-space: nowrap; }
+        .viewers b { color: var(--text); }
+
+        .twitch-state {
+            margin-left: auto;
+            font-size: 11px;
+            white-space: nowrap;
+            color: var(--muted);
+        }
+
+        .twitch-state.is-on { color: var(--on); }
+        .twitch-state.is-off { color: var(--danger); }
+
+        .stream-title {
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .warn-row {
+            display: block;
+            padding: 3px 7px;
+            border-radius: 6px;
+            background: rgba(224, 175, 104, 0.14);
+            color: var(--warn);
+            font-size: 11px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .warn-row:hover { text-decoration: underline; }
+
+        /* ── Sections repliables ──────────────────────────────────────────── */
+        .section-toggle {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            width: 100%;
+            margin: 0 0 4px;
+            padding: 0;
+            border: 0;
+            background: none;
+            font-family: inherit;
+            font-size: 10px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .section-toggle::after {
+            content: "▾";
+            margin-left: auto;
+            font-size: 10px;
+        }
+
+        .panel.is-collapsed .section-toggle { margin-bottom: 0; }
+        .panel.is-collapsed .section-toggle::after { content: "▸"; }
+        .panel.is-collapsed .section-body { display: none; }
+
+        [hidden] { display: none !important; }
+
+        /* ── Followers ────────────────────────────────────────────────────── */
+        .big-row {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .big {
+            font-size: 20px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.1;
+        }
+
+        .delta { color: var(--on); font-weight: 700; font-size: 12px; }
+
+        .last-row {
+            display: flex;
+            align-items: baseline;
+            gap: 5px;
+            min-width: 0;
+            font-size: 12px;
+        }
+
+        .last-row b {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .last-row .when { flex: none; color: var(--muted); font-size: 11px; }
+
+        /* ── Stats du live ────────────────────────────────────────────────── */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 4px;
+        }
+
+        .stat {
+            padding: 3px 2px;
+            border-radius: 6px;
+            background: var(--panel-2);
+            text-align: center;
+            line-height: 1.15;
+        }
+
+        .stat-value {
+            display: block;
+            font-size: 14px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .stat-label {
+            display: block;
+            font-size: 9px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Dock très étroit : tuiles de ~38 px, le libellé n'y tient plus. L'icône
+           colorée suffit, le libellé complet reste en infobulle. */
+        @media (max-width: 280px) {
+            .stat-label .txt { display: none; }
+            .stat-label { font-size: 11px; }
+        }
+
+        .ico { font-style: normal; }
+        .k-follow { color: #ff7eb6; }
+        .k-sub, .k-resub, .k-prime { color: #bb9af7; }
+        .k-gift { color: var(--on); }
+        .k-cheer { color: #7dcfff; }
+        .k-raid { color: #ff9e64; }
+        .k-channel_points { color: var(--accent); }
+
+        /* ── Objectifs et compte à rebours ────────────────────────────────── */
+        .goal { margin-bottom: 4px; }
+        .goal:last-child { margin-bottom: 0; }
+
+        .goal-line {
+            display: flex;
+            gap: 6px;
+            font-size: 11px;
+        }
+
+        .goal-title {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .goal-value {
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .goal-track {
+            height: 3px;
+            margin-top: 2px;
+            border-radius: 2px;
+            background: var(--panel-2);
+            overflow: hidden;
+        }
+
+        .goal-fill {
+            height: 100%;
+            background: var(--goal-color, var(--accent));
+        }
+
+        .timer-row {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            margin-top: 4px;
+            font-size: 12px;
+        }
+
+        .timer-row b { font-variant-numeric: tabular-nums; }
+
+        /* ── Activité ──────────────────────────────────────────────────────── */
+        .activity {
             margin: 0;
             padding: 0;
+            list-style: none;
         }
 
-        main {
-            /* Panneau lisible, pas une incrustation : fond opaque conservé. */
-            background-color: #0a0a0a;
-            color: var(--pc-text);
-            min-height: 100vh;
-            font-family: var(--pc-font);
-            font-size: calc(1rem * var(--pc-font-scale));
+        .activity li {
+            display: flex;
+            align-items: baseline;
+            gap: 5px;
+            min-width: 0;
+            font-size: 12px;
+            line-height: 1.5;
         }
 
-        div {
-            margin-bottom: 8px;
+        .activity .who {
+            flex: none;
+            max-width: 55%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 600;
         }
 
-        strong {
-            font-weight: bold;
+        .activity .what {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .activity .when {
+            flex: none;
+            color: var(--muted);
+            font-size: 10px;
+        }
+
+        /* ── Musique ───────────────────────────────────────────────────────── */
+        .music-row {
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
     </style>
 </head>
 <body>
-    <main>
-        <div>
-            <strong>Total Abonnés:</strong>
-            <span id="totalFollowers">-</span>
+    <div class="dock">
+        <div class="status-row">
+            <span class="live-pill" id="livePill"><span class="live-dot"></span><span id="liveText">Live ?</span></span>
+            <span class="viewers" id="viewers" hidden>👁 <b id="viewersCount">0</b></span>
+            <span class="twitch-state" id="twitchState" title="Connexion aux événements Twitch (EventSub)">Twitch …</span>
         </div>
-        <div>
-            <strong>Dernier Abonné:</strong>
-            <span id="lastFollower">-</span>
-        </div>
-        <div>
-            <strong>En cours:</strong>
-            <span id="currentMusic">-</span>
-        </div>
-    </main>
+        <div class="stream-title" id="streamTitle" hidden></div>
+        <a class="warn-row" id="tokenWarning" href="/settings" target="_blank" hidden></a>
 
-    <script src="/public/js/music-api.js"></script>
+        <section class="panel" data-section="followers">
+            <button class="panel-title section-toggle" type="button">Followers</button>
+            <div class="section-body">
+                <div class="big-row">
+                    <span class="big" id="totalFollowers">–</span>
+                    <span class="delta" id="followDelta"></span>
+                </div>
+                <div class="last-row">
+                    <span class="muted">Dernier</span>
+                    <b id="lastFollower">–</b>
+                    <span class="when" id="lastFollowerAgo"></span>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel" data-section="stats">
+            <button class="panel-title section-toggle" type="button" id="statsTitle">Ce live</button>
+            <div class="section-body stats">
+                <!-- Nombre seul sur la première ligne : avec l'icône, « 1,5k » ne
+                     tenait plus dans une tuile de 38 px. -->
+                <div class="stat" title="Nouveaux followers"><span class="stat-value" id="statFollows">0</span><span class="stat-label"><i class="ico k-follow">♥</i><span class="txt"> follows</span></span></div>
+                <div class="stat" title="Abonnements, réabonnements et Prime"><span class="stat-value" id="statSubs">0</span><span class="stat-label"><i class="ico k-sub">★</i><span class="txt"> subs</span></span></div>
+                <div class="stat" title="Abonnements offerts"><span class="stat-value" id="statGifts">0</span><span class="stat-label"><i class="ico k-gift">✚</i><span class="txt"> offerts</span></span></div>
+                <div class="stat" title="Bits"><span class="stat-value" id="statBits">0</span><span class="stat-label"><i class="ico k-cheer">◆</i><span class="txt"> bits</span></span></div>
+                <div class="stat" id="statRaidsTile" title="Raids"><span class="stat-value" id="statRaids">0</span><span class="stat-label"><i class="ico k-raid">⚑</i><span class="txt" id="statRaidViewers"> raids</span></span></div>
+            </div>
+        </section>
+
+        <section class="panel" data-section="goals" id="goalsPanel" hidden>
+            <button class="panel-title section-toggle" type="button" id="goalsTitle">Objectifs</button>
+            <div class="section-body">
+                <div id="goals"></div>
+                <div class="timer-row" id="timerRow" hidden>
+                    <span>⏱</span><b id="timerValue">0:00</b><span class="muted" id="timerState"></span>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel" data-section="activity">
+            <button class="panel-title section-toggle" type="button">Activité</button>
+            <ol class="section-body activity" id="activity"></ol>
+        </section>
+
+        <div class="music-row" id="musicRow">♪ <span id="currentMusic">–</span></div>
+    </div>
+
+    {% include "partials/_event_card.html" %}
+
     <script>
         const MUSIC_PORT = {{ music_port }};
 
-        // Isolé dans un try/catch : si music-api.js manque (404), l'erreur ne doit
-        // pas avorter le reste du script et casser aussi l'affichage des followers.
-        try {
-            connectMusicWS(MUSIC_PORT, (track) => {
-                document.getElementById('currentMusic').textContent = track || "Off";
+        const DAY_MS = 24 * 60 * 60 * 1000;
+        /** Lignes d'activité affichées : le dock est petit, la liste défile en tête. */
+        const ACTIVITY_ROWS = 8;
+        /** Un jeton qui expire dans moins d'une semaine mérite d'être signalé. */
+        const TOKEN_WARN_S = 7 * 24 * 60 * 60;
+        const COLLAPSED_KEY = 'praetorcast.followersInfo.collapsed';
+
+        const ICONS = {
+            follow: '♥', sub: '★', resub: '★', prime: '★', gift: '✚',
+            cheer: '◆', raid: '⚑', channel_points: '●',
+        };
+
+        let events = [];
+        let stream = null;          // /api/twitch/stream
+        let twitch = null;          // /api/twitch_ws
+        let timer = null;           // /api/timer_ws, avec l'instant de réception
+        let goals = [];             // /api/goal_ws
+
+        const $ = (id) => document.getElementById(id);
+
+        // ── Fonctions pures ──────────────────────────────────────────────────
+
+        /** « à l'instant », « 4 min », « 2 h », « 3 j ». */
+        function timeAgo(thenMs, nowMs) {
+            const diff = Math.max(0, nowMs - thenMs);
+            if (diff < 45 * 1000) return 'à l\'instant';
+            const minutes = Math.round(diff / 60000);
+            if (minutes < 60) return `${Math.max(1, minutes)} min`;
+            const hours = Math.floor(diff / 3600000);
+            if (hours < 24) return `${hours} h`;
+            return `${Math.floor(diff / DAY_MS)} j`;
+        }
+
+        /** Durée en « 1:23:45 », ou « 23:45 » sous l'heure. */
+        function formatDuration(ms) {
+            const total = Math.max(0, Math.floor(ms / 1000));
+            const s = String(total % 60).padStart(2, '0');
+            const m = Math.floor(total / 60) % 60;
+            const h = Math.floor(total / 3600);
+            return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+        }
+
+        /** Nombre court pour une tuile : 999, 1,5k, 15k, 1,2M. */
+        function compact(value) {
+            const n = Number(value) || 0;
+            const short = (x, unit) => `${x.toFixed(1).replace(/\.0$/, '').replace('.', ',')}${unit}`;
+            if (n < 1000) return String(n);
+            if (n < 10000) return short(n / 1000, 'k');
+            if (n < 1e6) return `${Math.round(n / 1000)}k`;
+            return short(n / 1e6, 'M');
+        }
+
+        /**
+         * Totaux depuis `since` (ms). Les tests ne comptent pas ; les points de
+         * chaîne non plus — ce ne sont pas des revenus ni des arrivées. Un don groupé
+         * compte autant de subs offerts que son montant.
+         */
+        function sessionStats(list, since) {
+            const stats = { follows: 0, subs: 0, gifts: 0, bits: 0, raids: 0, raiders: 0 };
+            for (const event of list || []) {
+                if (!event || event.test || !(event.atMs >= since)) continue;
+                const amount = Number(event.amount) || 0;
+                switch (event.kind) {
+                    case 'follow': stats.follows++; break;
+                    case 'sub': case 'resub': case 'prime': stats.subs++; break;
+                    case 'gift': stats.gifts += amount; break;
+                    case 'cheer': stats.bits += amount; break;
+                    case 'raid': stats.raids++; stats.raiders += amount; break;
+                }
+            }
+            return stats;
+        }
+
+        /** Début de la fenêtre des stats : le live en cours, sinon les dernières 24 h. */
+        function statsWindow(info, nowMs) {
+            const started = info && info.live ? Date.parse(info.startedAt) : NaN;
+            return Number.isFinite(started)
+                ? { since: started, label: 'Ce live' }
+                : { since: nowMs - DAY_MS, label: '24 dernières heures' };
+        }
+
+        /** Avertissement sur le jeton Twitch, ou `null` si tout va bien. */
+        function tokenWarning(status) {
+            if (!status) return null;
+            if (status.hasToken === false) return 'Pas de jeton Twitch — le connecter dans Réglages ›';
+            if (status.valid === false) return 'Jeton Twitch invalide ou expiré — le refaire dans Réglages ›';
+            const missing = Array.isArray(status.scopesMissing) ? status.scopesMissing : [];
+            if (missing.length > 0) return `Droits manquants : ${missing.join(', ')} — Réglages ›`;
+            if (typeof status.expiresIn === 'number' && status.expiresIn < TOKEN_WARN_S) {
+                const days = Math.floor(status.expiresIn / 86400);
+                const left = days >= 1 ? `${days} j` : `${Math.max(1, Math.floor(status.expiresIn / 3600))} h`;
+                return `Jeton Twitch : expire dans ${left} — Réglages ›`;
+            }
+            return null;
+        }
+
+        /** Le compte à rebours mérite une ligne s'il tourne, s'il est entamé, ou en subathon. */
+        function timerVisible(t) {
+            if (!t) return false;
+            if (t.running || (t.subathon && t.subathon.enabled)) return true;
+            return t.remainingMs > 0 && t.remainingMs < t.durationMs;
+        }
+
+        /** Temps restant du compte à rebours, extrapolé depuis la dernière trame. */
+        function timerRemaining(t, nowMs) {
+            const elapsed = t.running ? nowMs - t.receivedAt : 0;
+            return Math.max(0, t.remainingMs - elapsed);
+        }
+
+        /**
+         * Valeur d'objectif : en entier sous 10 000 — « 1 234/1 300 » dit à quel
+         * follower on en est, là où « 1,2k/1,3k » ne le dit plus —, courte au-delà.
+         */
+        function goalNumber(value) {
+            const n = Number(value) || 0;
+            return n < 10000 ? n.toLocaleString('fr-FR') : compact(n);
+        }
+
+        /** Libellé de la section objectifs selon ce qu'elle contient. */
+        function goalsLabel(goalCount, showTimer) {
+            if (goalCount > 0 && showTimer) return 'Objectifs · timer';
+            return goalCount > 0 ? 'Objectifs' : 'Compte à rebours';
+        }
+
+        // ── Rendu ────────────────────────────────────────────────────────────
+
+        function renderStatus(nowMs) {
+            const pill = $('livePill');
+            const live = stream && stream.live === true;
+            pill.classList.toggle('is-live', live);
+            if (live) {
+                const started = Date.parse(stream.startedAt);
+                $('liveText').textContent = Number.isFinite(started)
+                    ? `LIVE ${formatDuration(nowMs - started)}`
+                    : 'LIVE';
+            } else {
+                $('liveText').textContent = stream && stream.live === false ? 'Hors ligne' : 'Live ?';
+            }
+
+            $('viewers').hidden = !live;
+            if (live) $('viewersCount').textContent = compact(stream.viewers);
+
+            const title = $('streamTitle');
+            const parts = live ? [stream.game, stream.title].filter(Boolean) : [];
+            title.hidden = parts.length === 0;
+            title.textContent = parts.join(' · ');
+            title.title = parts.join(' · ');
+
+            const state = $('twitchState');
+            const connected = twitch && twitch.connected === true;
+            state.textContent = twitch ? (connected ? 'Twitch ✓' : 'Twitch ✕') : 'Twitch …';
+            state.classList.toggle('is-on', connected);
+            state.classList.toggle('is-off', !!twitch && !connected);
+        }
+
+        function renderFollowers(nowMs) {
+            if (!twitch) return;
+            $('totalFollowers').textContent = Number(twitch.total_followers || 0).toLocaleString('fr-FR');
+            $('lastFollower').textContent = twitch.last_follower || 'aucun';
+            const at = Date.parse(twitch.lastFollowerAt);
+            $('lastFollowerAgo').textContent = Number.isFinite(at) ? timeAgo(at, nowMs) : '';
+        }
+
+        function renderStats(nowMs) {
+            const { since, label } = statsWindow(stream, nowMs);
+            const stats = sessionStats(events, since);
+            $('statsTitle').textContent = label;
+            $('statFollows').textContent = compact(stats.follows);
+            $('statSubs').textContent = compact(stats.subs);
+            $('statGifts').textContent = compact(stats.gifts);
+            $('statBits').textContent = compact(stats.bits);
+            $('statRaids').textContent = compact(stats.raids);
+            $('statRaidViewers').textContent = stats.raiders > 0 ? ` raids · ${compact(stats.raiders)}` : ' raids';
+            $('statRaidsTile').title = `Raids : ${stats.raids}, ${stats.raiders} spectateurs amenés`;
+            $('followDelta').textContent = stats.follows > 0
+                ? `+${stats.follows} ${label === 'Ce live' ? 'ce live' : 'en 24 h'}`
+                : '';
+        }
+
+        function renderGoals(nowMs) {
+            const visible = goals.filter((g) => g && g.config && g.config.visible !== false);
+            const showTimer = timerVisible(timer);
+            $('goalsPanel').hidden = visible.length === 0 && !showTimer;
+            $('goalsTitle').textContent = goalsLabel(visible.length, showTimer);
+
+            const box = $('goals');
+            box.replaceChildren(...visible.map((entry) => {
+                const goal = document.createElement('div');
+                goal.className = 'goal';
+
+                const line = document.createElement('div');
+                line.className = 'goal-line';
+                const title = document.createElement('span');
+                title.className = 'goal-title';
+                title.textContent = entry.config.title || 'Objectif';
+                const value = document.createElement('span');
+                value.className = 'goal-value';
+                const current = typeof entry.current === 'number' ? goalNumber(entry.current) : '–';
+                const percent = typeof entry.percent === 'number' ? ` · ${Math.round(entry.percent)} %` : '';
+                value.textContent = `${current}/${goalNumber(entry.config.target)}${percent}`;
+                line.append(title, value);
+
+                const track = document.createElement('div');
+                track.className = 'goal-track';
+                const fill = document.createElement('div');
+                fill.className = 'goal-fill';
+                fill.style.width = `${Math.min(100, Math.max(0, Number(entry.percent) || 0))}%`;
+                if (entry.config.accentColor) fill.style.setProperty('--goal-color', entry.config.accentColor);
+                track.appendChild(fill);
+
+                goal.append(line, track);
+                return goal;
+            }));
+
+            $('timerRow').hidden = !showTimer;
+            if (showTimer) {
+                $('timerValue').textContent = formatDuration(timerRemaining(timer, nowMs));
+                const state = timer.running ? 'en cours' : 'en pause';
+                $('timerState').textContent = timer.subathon && timer.subathon.enabled ? `${state} · subathon` : state;
+            }
+        }
+
+        function renderActivity(nowMs) {
+            // Tous les types, points de chaîne compris ; jamais un test.
+            const rows = events.filter((event) => event && !event.test).slice(0, ACTIVITY_ROWS);
+
+            const list = $('activity');
+            if (rows.length === 0) {
+                const empty = document.createElement('li');
+                empty.className = 'muted';
+                empty.textContent = 'Aucun événement pour l\'instant.';
+                list.replaceChildren(empty);
+                return;
+            }
+
+            list.replaceChildren(...rows.map((event) => {
+                const li = document.createElement('li');
+                const icon = document.createElement('i');
+                icon.className = `ico k-${event.kind}`;
+                icon.textContent = ICONS[event.kind] || '•';
+                const who = document.createElement('span');
+                who.className = 'who';
+                who.textContent = event.userName || 'Anonyme';
+                const what = document.createElement('span');
+                what.className = 'what';
+                const detail = describeEvent(event).detail;
+                what.textContent = event.kind === 'channel_points' ? 'récompense' : detail || (event.kind === 'follow' ? 'follow' : '');
+                const when = document.createElement('span');
+                when.className = 'when';
+                when.textContent = Number.isFinite(event.atMs) && event.atMs > 0 ? timeAgo(event.atMs, nowMs) : '';
+                li.append(icon, who, what, when);
+                return li;
+            }));
+        }
+
+        function renderAll() {
+            const now = Date.now();
+            renderStatus(now);
+            renderFollowers(now);
+            renderStats(now);
+            renderGoals(now);
+            renderActivity(now);
+        }
+
+        // ── Sections repliables ──────────────────────────────────────────────
+
+        /** Sections repliées, lues au chargement. Stockage refusé ou vide : aucune. */
+        function loadCollapsed() {
+            try {
+                const saved = JSON.parse(window.localStorage.getItem(COLLAPSED_KEY) || '[]');
+                return Array.isArray(saved) ? saved : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function saveCollapsed(names) {
+            try {
+                window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(names));
+            } catch (e) { /* navigation privée, stockage plein : l'état reste en mémoire */ }
+        }
+
+        function setupSections() {
+            let collapsed = loadCollapsed();
+            document.querySelectorAll('.panel[data-section]').forEach((panel) => {
+                const name = panel.dataset.section;
+                panel.classList.toggle('is-collapsed', collapsed.includes(name));
+                panel.querySelector('.section-toggle').addEventListener('click', () => {
+                    const folded = panel.classList.toggle('is-collapsed');
+                    collapsed = folded
+                        ? [...collapsed.filter((n) => n !== name), name]
+                        : collapsed.filter((n) => n !== name);
+                    saveCollapsed(collapsed);
+                });
             });
-        } catch (e) {
-            console.error("connectMusicWS indisponible:", e);
         }
 
-        function connectTwitchWS() {
-            const ws = new WebSocket(`ws://${window.location.host}/api/twitch_ws`);
+        // ── Données ──────────────────────────────────────────────────────────
 
-            ws.onmessage = (evt) => {
-                const data = JSON.parse(evt.data);
-                document.getElementById('totalFollowers').textContent = data.total_followers ?? '-';
-                document.getElementById('lastFollower').textContent = data.last_follower ?? 'Aucun';
-            };
-
-            ws.onclose = () => setTimeout(connectTwitchWS, 5000);
-            ws.onerror = () => ws.close();
+        function connect(url, onMessage, retryMs = 5000) {
+            let ws;
+            try {
+                ws = new WebSocket(url);
+            } catch (e) {
+                setTimeout(() => connect(url, onMessage, retryMs), retryMs);
+                return;
+            }
+            ws.addEventListener('message', (evt) => {
+                try { onMessage(JSON.parse(evt.data)); } catch (e) { /* trame ignorée */ }
+            });
+            ws.addEventListener('close', () => setTimeout(() => connect(url, onMessage, retryMs), retryMs));
         }
 
-        window.addEventListener('load', connectTwitchWS);
+        function applyEventMessage(data) {
+            if (!data) return;
+            if (data.type === 'snapshot') {
+                events = Array.isArray(data.events) ? data.events : [];
+            } else if (data.type === 'event' && data.event && !data.event.test) {
+                events = [data.event, ...events];
+            } else {
+                return;
+            }
+            const now = Date.now();
+            renderFollowers(now);
+            renderStats(now);
+            renderActivity(now);
+        }
+
+        async function refreshStream() {
+            try {
+                const response = await fetch('/api/twitch/stream');
+                stream = response.ok ? await response.json() : null;
+            } catch (e) {
+                stream = null;
+            }
+            const now = Date.now();
+            renderStatus(now);
+            renderStats(now);
+        }
+
+        async function refreshToken() {
+            let status = null;
+            try {
+                const response = await fetch('/api/twitch/auth-status');
+                status = response.ok ? await response.json() : null;
+            } catch (e) { /* serveur injoignable : pas d'avertissement plutôt qu'un faux */ }
+            const warning = tokenWarning(status);
+            $('tokenWarning').hidden = !warning;
+            $('tokenWarning').textContent = warning || '';
+        }
+
+        function showTrack(data) {
+            const name = data && data.current_music ? data.current_music.replace(/\.[a-z0-9]{2,4}$/i, '') : '';
+            $('currentMusic').textContent = name ? `${name}${data.paused ? ' ⏸' : ''}` : 'rien en lecture';
+            $('musicRow').title = data && data.current_music ? data.current_music : '';
+        }
+
+        window.addEventListener('load', () => {
+            setupSections();
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            const base = `${proto}://${location.host}`;
+
+            connect(`${base}/api/twitch_ws`, (data) => { twitch = data; renderStatus(Date.now()); renderFollowers(Date.now()); });
+            connect(`${base}/api/events_ws`, applyEventMessage);
+            connect(`${base}/api/goal_ws`, (data) => { goals = data.goals || []; renderGoals(Date.now()); });
+            connect(`${base}/api/timer_ws`, (data) => { timer = { ...data, receivedAt: Date.now() }; renderGoals(Date.now()); });
+            connect(`ws://${location.hostname || 'localhost'}:${MUSIC_PORT}/api/current_music_ws`, showTrack);
+
+            refreshStream();
+            refreshToken();
+            setInterval(refreshStream, 30 * 1000);
+            setInterval(refreshToken, 10 * 60 * 1000);
+            // Durée du live et compte à rebours à la seconde ; « il y a » suit.
+            setInterval(renderAll, 1000);
+            renderAll();
+        });
     </script>
 </body>
 </html>

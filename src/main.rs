@@ -157,6 +157,7 @@ async fn main() -> std::io::Result<()> {
             .route("/api/twitch_ws", web::get().to(twitch_controller::ws_handler))
             .route("/api/twitch/badges", web::get().to(twitch_controller::badges))
             .route("/api/twitch/emotes", web::get().to(twitch_controller::emotes))
+            .route("/api/twitch/stream", web::get().to(twitch_controller::stream))
             // Effets : pluie d'emotes, cadre caméra, visualiseur
             .route("/effects-config", web::get().to(effects_controller::page))
             .route("/api/effects-config", web::get().to(effects_controller::get))

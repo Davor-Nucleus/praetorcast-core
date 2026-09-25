@@ -14,9 +14,11 @@ use super::fs_atomic;
 
 pub const EVENTS_PATH: &str = "data/events.json";
 
-/// Nombre d'événements gardés. La bannière n'en montre qu'un par type ; vingt
-/// laissent de quoi retrouver un raid derrière une rafale de follows.
-pub const KEEP: usize = 20;
+/// Nombre d'événements gardés. La bannière n'en montre qu'un par type, mais le dock
+/// `/followers-info` calcule les stats d'un live entier à partir de ce journal :
+/// cinq cents couvrent un long live actif, pour une cinquantaine de Ko réécrits à
+/// chaque événement.
+pub const KEEP: usize = 500;
 
 /// Sérialise lecture-modification-écriture du journal dans ce processus.
 static WRITE_LOCK: Mutex<()> = Mutex::new(());
