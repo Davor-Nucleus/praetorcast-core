@@ -176,7 +176,7 @@ await check('une carte objectif propose un sélecteur, pas de champ texte', () =
   api.renderCards();
   const markup = ids.cardList.children[0].innerHTML;
   assert.ok(markup.includes('Objectif affiché'), 'sélecteur d’objectif absent');
-  assert.ok(!markup.includes('Text Content'), 'champ texte présent à tort');
+  assert.ok(!markup.includes('Texte affiché'), 'champ texte présent à tort');
   assert.ok(!markup.includes('image-upload-container'), 'téléversement d’image proposé à tort');
 });
 
@@ -186,7 +186,7 @@ await check('une carte texte garde son champ texte et son téléversement', () =
   api.setCards([{ id: 'c1', kind: 'text', text: 'Bonjour', transition: 'fade' }]);
   api.renderCards();
   const markup = ids.cardList.children[0].innerHTML;
-  assert.ok(markup.includes('Text Content'));
+  assert.ok(markup.includes('Texte affiché'));
   assert.ok(markup.includes('image-upload-container'));
   assert.ok(!markup.includes('goal-badge'));
 });

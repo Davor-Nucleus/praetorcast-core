@@ -33,7 +33,7 @@ pub async fn save(config: web::Json<SchedulerConfig>) -> impl Responder {
         Err(e) => {
             eprintln!("{}", e);
             HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": "Failed to save scheduler config"}))
+                .json(serde_json::json!({"error": "Impossible d'enregistrer le planning"}))
         }
     }
 }

@@ -57,7 +57,7 @@ pub async fn save(theme: web::Json<Theme>) -> impl Responder {
         Err(e) => {
             eprintln!("{e}");
             HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": "Failed to save theme config"}))
+                .json(serde_json::json!({"error": "Impossible d'enregistrer le thème"}))
         }
     }
 }

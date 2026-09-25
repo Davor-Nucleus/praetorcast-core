@@ -1,0 +1,247 @@
+{% include "partials/_dock_base.html" %}
+
+{% include "partials/_header.html" %}
+
+/* ── Back-office : même langage visuel que les docks ─────────────────────────
+   À inclure en FIN du <style> de chaque page d'administration : à spécificité
+   égale, ces règles l'emportent sur ce qui reste de l'ancien style de la page.
+   Chaque page ne garde que sa mise en page (largeurs, grilles, aperçus).
+
+   Les pages parlent encore les anciens noms de variables (`--bg-card`,
+   `--accent-primary`…) : ils sont rattachés ici aux jetons des docks, ce qui aligne
+   d'un coup toutes les règles qui s'en servent. */
+:root {
+    --bg-dark: var(--bg);
+    --bg-card: var(--panel);
+    --bg-panel: var(--panel);
+    --border-light: var(--border);
+    --text-main: var(--text);
+    --text-muted: var(--muted);
+    --accent-primary: var(--accent);
+    --accent-secondary: #5b7fd9;
+    --accent-glow: var(--accent);
+    --accent-green: var(--on);
+    --success: var(--on);
+    --warning: var(--warn);
+    --danger-bg: rgba(247, 118, 142, 0.14);
+
+    /* Espacements resserrés, comme dans les docks. */
+    --spacing-sm: 0.4rem;
+    --spacing-md: 0.75rem;
+    --spacing-lg: 1rem;
+    --spacing-xl: 1.5rem;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+
+    /* Pas d'ombres portées : les panneaux se détachent par leur bordure. */
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-glow: 0 0 0 2px rgba(122, 162, 247, 0.35);
+}
+
+/* ── Panneaux ──────────────────────────────────────────────────────────────── */
+.card,
+.card-item {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: none;
+}
+
+/* Titres de panneau et de liste (« Cartes en rotation ») : le style des titres de
+   panneau des docks. Chaque page garde ses marges. */
+.card-title,
+.section-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+/* Liens dans le texte (explications, aides) : l'accent, pas le bleu du navigateur. */
+.page-container p a,
+.page-container .hint a,
+.page-container .field-hint a {
+    color: var(--accent);
+}
+
+/* ── Boutons ───────────────────────────────────────────────────────────────── */
+/* Pas de `padding` ici : inclus en fin de page, il écraserait celui des variantes
+   de chaque page (`.btn-danger` de /goal-config est volontairement plus serré). */
+.btn {
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* Action principale : accent plein, comme ▶ dans /music-config. */
+.btn-save {
+    background: var(--accent);
+    color: #0f1220;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.btn-save:hover {
+    background: #9ab8ff;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-ghost,
+.btn-preview {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+
+.btn-ghost { background: transparent; color: var(--muted); }
+
+.btn-ghost:hover,
+.btn-preview:hover {
+    border-color: var(--accent);
+    color: var(--text);
+    background: var(--panel-2);
+}
+
+.btn-icon {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+}
+
+.btn-icon:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.btn-icon:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.btn-delete {
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+}
+
+.btn-delete:hover:not(:disabled) {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+/* Variantes de page qui portent une bordure : le `.btn` des docks, inclus après
+   elles, la remettait à `transparent`. */
+.btn-danger {
+    border: 1px solid var(--danger);
+}
+
+.btn-secondary {
+    border: 1px solid var(--border);
+}
+
+.btn-add,
+.btn-add-card {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-weight: 600;
+}
+
+.btn-add:hover,
+.btn-add-card:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(122, 162, 247, 0.06);
+}
+
+/* ── Champs ────────────────────────────────────────────────────────────────── */
+/* Couleurs et forme seulement : chaque page garde ses tailles (un titre de
+   récompense reste plus gros qu'un champ de palier). */
+.input-field,
+.page-container input[type="text"],
+.page-container input[type="number"],
+.page-container input[type="url"],
+.page-container input[type="password"],
+.page-container input[type="time"],
+.page-container select,
+.page-container textarea {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+}
+
+.input-field { font-size: 13px; }
+
+.input-field:focus,
+.page-container input:focus,
+.page-container select:focus,
+.page-container textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: var(--shadow-glow);
+}
+
+.page-container input[type="checkbox"],
+.page-container input[type="radio"],
+.page-container input[type="range"] {
+    accent-color: var(--accent);
+}
+
+.page-container ::placeholder { color: #6b7394; }
+
+/* ── Libellés et aides ─────────────────────────────────────────────────────── */
+.control-label,
+.text-input-group > label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.hint,
+.field-hint {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* Un paragraphe d'aide sépare deux blocs : le `.hint` des docks lui retire toute
+   marge, ce qui collait les libellés au texte au-dessus. */
+.page-container p.hint {
+    margin: 0 0 var(--spacing-md);
+    line-height: 1.45;
+}
+
+.page-container code {
+    padding: 0.05rem 0.35rem;
+    border-radius: 4px;
+    background: var(--panel-2);
+    color: var(--accent);
+    font-size: 0.9em;
+}
+
+/* ── Accusé de réception flottant ──────────────────────────────────────────── */
+.toast {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+}
+
+.toast.saved { border-left-color: var(--on); color: var(--on); }
+.toast.error { border-left-color: var(--danger); color: var(--danger); }
+
+/* ── Focus clavier visible partout ─────────────────────────────────────────── */
+.page-container button:focus-visible,
+.page-container a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}

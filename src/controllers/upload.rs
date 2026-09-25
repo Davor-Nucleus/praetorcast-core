@@ -40,7 +40,7 @@ pub async fn save_upload(
     if let Err(e) = fs::create_dir_all(dir) {
         eprintln!("Error creating directory {}: {}", dir, e);
         return HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": "Failed to create directory"}));
+            .json(serde_json::json!({"error": "Impossible de créer le dossier de destination"}));
     }
 
     while let Ok(Some(mut field)) = payload.try_next().await {
@@ -69,7 +69,7 @@ pub async fn save_upload(
             Err(e) => {
                 eprintln!("Error creating file: {}", e);
                 return HttpResponse::InternalServerError()
-                    .json(serde_json::json!({"error": "Failed to create file"}));
+                    .json(serde_json::json!({"error": "Impossible de créer le fichier"}));
             }
         };
 
@@ -92,7 +92,7 @@ pub async fn save_upload(
                 drop(file);
                 let _ = fs::remove_file(&filepath);
                 return HttpResponse::InternalServerError()
-                    .json(serde_json::json!({"error": "Failed to write file"}));
+                    .json(serde_json::json!({"error": "Impossible d'écrire le fichier"}));
             }
         }
 

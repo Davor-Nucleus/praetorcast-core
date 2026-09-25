@@ -89,7 +89,7 @@ fn mutate(notify: &TimerNotify, change: impl FnOnce(&mut Timer, u64)) -> HttpRes
         Err(e) => {
             eprintln!("{e}");
             HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": "Failed to save timer state"}))
+                .json(serde_json::json!({"error": "Impossible d'enregistrer le compte à rebours"}))
         }
     }
 }

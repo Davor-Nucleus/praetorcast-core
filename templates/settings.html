@@ -5,27 +5,6 @@
     <meta charset="utf-8">
     <title>Paramètres</title>
     <style>
-        :root {
-            --bg-dark: #121212;
-            --bg-card: #1e1e1e;
-            --text-main: #ffffff;
-            --text-muted: #a0a0a0;
-            --border-light: #333333;
-            --accent-primary: #3b82f6;
-            --accent-secondary: #2563eb;
-            --accent-glow: #60a5fa;
-            --danger: #ef4444;
-            --warning: #fbbf24;
-            --success: #22c55e;
-            --spacing-sm: 0.5rem;
-            --spacing-md: 1rem;
-            --spacing-lg: 1.5rem;
-            --spacing-xl: 2rem;
-            --radius-md: 0.375rem;
-            --radius-lg: 0.5rem;
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            --shadow-glow: 0 0 10px rgba(59, 130, 246, 0.5);
-        }
 
         body {
             margin: 0;
@@ -42,8 +21,6 @@
             margin: 0 auto;
         }
 
-        {% include "partials/_header.html" %}
-
         .btn {
             border: none;
             border-radius: var(--radius-md);
@@ -52,16 +29,6 @@
             font-family: inherit;
             cursor: pointer;
             transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-
-        .btn-save {
-            background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
-            color: #fff;
-        }
-
-        .btn-save:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-glow);
         }
 
         .btn-twitch {
@@ -288,6 +255,8 @@
             background: var(--pc-accent);
             opacity: 0.85;
         }
+
+        {% include "partials/_admin_base.html" %}
     </style>
     <!-- La police du thème est déclarée une seule fois, côté serveur. -->
     <link id="pc-theme" rel="stylesheet" href="/theme.css">

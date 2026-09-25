@@ -95,7 +95,7 @@ pub async fn save(config: web::Json<TextConfig>) -> impl Responder {
         Err(e) => {
             eprintln!("{}", e);
             HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": "Failed to save text config"}))
+                .json(serde_json::json!({"error": "Impossible d'enregistrer les textes"}))
         }
     }
 }

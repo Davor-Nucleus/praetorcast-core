@@ -16,20 +16,9 @@
     </style>
     {% endif %}
     <style>
+        /* Zone exportée en image : ses couleurs ne suivent pas le back-office,
+           l'image publiée sur les réseaux doit rester identique. */
         :root {
-            --spacing-xl: 2rem;
-            --bg-dark: #121212;
-            --text-main: #ffffff;
-            --spacing-md: 1rem;
-            --text-muted: #a0a0a0;
-            --spacing-sm: 0.5rem;
-            --radius-md: 0.375rem;
-            --accent-primary: #7aa2f7;
-            --accent-glow: #9aa5ce;
-            --bg-card: #1f1f1f;
-            --border-light: #333333;
-            --bg-panel: #1a1a1a;
-            --radius-lg: 0.5rem;
             --border-dark: #222222;
             --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         }
@@ -45,7 +34,8 @@
             width: 100vw;
             background-color: var(--bg-dark);
             color: var(--text-main);
-            font-family: {% if title_font != "" %}"title_font", {% endif %}"Instrument Sans", sans-serif;
+            /* L'éditeur suit le back-office ; la police du titre est réservée à la
+               zone exportée (`.export-container`), qui la déclare elle-même. */
             display: flex;
             flex-direction: column;
             padding: var(--spacing-md);
@@ -295,15 +285,6 @@
             transition: all 0.2s;
         }
 
-        .btn-save {
-            background-color: var(--accent-primary);
-            color: white;
-        }
-
-        .btn-save:hover {
-            background-color: var(--accent-glow);
-        }
-
         .btn-export {
             background-color: var(--text-main);
             color: var(--bg-dark);
@@ -413,6 +394,8 @@
             border-color: var(--accent-glow);
             color: var(--accent-glow);
         }
+
+        {% include "partials/_admin_base.html" %}
     </style>
 </head>
 <body>

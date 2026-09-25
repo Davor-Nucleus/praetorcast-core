@@ -4,115 +4,82 @@
     <meta charset="utf-8">
     <title>PraetorCast-core - Accueil</title>
     <style>
-        :root {
-            --bg-dark: #0a0a0a;
-            --bg-card: #1a1a1a;
-            --text-main: #ffffff;
-            --text-muted: #a0a0a0;
-            --accent-primary: #7aa2f7;
-            --accent-glow: #9aa5ce;
-            --border-light: #333333;
-            --radius-md: 0.5rem;
-            --spacing-md: 1rem;
-            --spacing-lg: 1.5rem;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        /* Même langage visuel que tout le back-office : partials/_admin_base.html. */
         body {
-            background: radial-gradient(circle at top, #1a1b26 0%, #0f0f13 100%);
-            color: var(--text-main);
-            font-family: "Instrument Sans", sans-serif;
             min-height: 100vh;
-            padding: var(--spacing-lg);
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
+            padding: var(--spacing-lg);
         }
 
         header {
-            text-align: center;
-            margin-bottom: var(--spacing-lg);
-            padding: var(--spacing-lg) 0;
+            margin-bottom: var(--spacing-xl);
         }
 
         h1 {
-            font-size: 2.5rem;
+            margin: 0 0 0.15rem;
+            font-size: 1.35rem;
             font-weight: 700;
-            color: var(--accent-glow);
-            margin-bottom: 0.5rem;
+            color: var(--text);
         }
 
         .subtitle {
-            color: var(--text-muted);
-            font-size: 1rem;
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+
+        .category {
+            margin-bottom: var(--spacing-xl);
+        }
+
+        /* Titre de catégorie au style des titres de panneau des docks. */
+        .category-title {
+            margin: 0 0 var(--spacing-sm);
         }
 
         .links-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: var(--spacing-md);
-            margin-top: var(--spacing-lg);
+            grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+            gap: 8px;
         }
 
         .link-card {
-            background-color: var(--bg-card);
-            border: 1px solid var(--border-light);
-            border-radius: var(--radius-md);
-            padding: var(--spacing-md);
-            transition: all 0.2s ease;
-            text-decoration: none;
-            color: var(--text-main);
             display: block;
+            padding: 10px 12px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text);
+            text-decoration: none;
+            transition: border-color 0.15s, background-color 0.15s;
         }
 
-        .link-card:hover {
-            border-color: var(--accent-primary);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(122, 162, 247, 0.2);
+        .link-card:hover,
+        .link-card:focus-visible {
+            border-color: var(--accent);
+            background: var(--panel-2);
+            outline: none;
         }
 
         .link-card h2 {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--accent-primary);
-            margin-bottom: 0.5rem;
+            margin: 0 0 3px;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
         }
 
         .link-card p {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            line-height: 1.5;
+            margin: 0;
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--muted);
         }
 
-        .category {
-            margin-bottom: var(--spacing-lg);
-        }
-
-        .category-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: var(--accent-glow);
-            margin-bottom: var(--spacing-md);
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid var(--border-light);
-        }
-
-        @media (max-width: 768px) {
-            .links-grid {
-                grid-template-columns: 1fr;
-            }
-
-            h1 {
-                font-size: 2rem;
-            }
-        }
+        {% include "partials/_admin_base.html" %}
     </style>
 </head>
 <body>
@@ -123,7 +90,7 @@
         </header>
 
         <div class="category">
-            <h2 class="category-title">Affichage</h2>
+            <h2 class="category-title panel-title">Affichage</h2>
             <div class="links-grid">
                 <a href="/clock" class="link-card">
                     <h2>Horloge</h2>
@@ -177,7 +144,7 @@
         </div>
 
         <div class="category">
-            <h2 class="category-title">Configuration</h2>
+            <h2 class="category-title panel-title">Configuration</h2>
             <div class="links-grid">
                 <a href="/music-config" class="link-card">
                     <h2>Configuration Musique</h2>
@@ -219,7 +186,7 @@
         </div>
 
         <div class="category">
-            <h2 class="category-title">Chat</h2>
+            <h2 class="category-title panel-title">Chat</h2>
             <div class="links-grid">
                 <a href="/chat-horizontal" class="link-card">
                     <h2>Chat Horizontal</h2>
@@ -237,7 +204,7 @@
         </div>
 
         <div class="category">
-            <h2 class="category-title">Informations</h2>
+            <h2 class="category-title panel-title">Informations</h2>
             <div class="links-grid">
                 <a href="/followers-info" class="link-card">
                     <h2>Tableau de bord (dock)</h2>

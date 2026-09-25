@@ -81,7 +81,7 @@ pub async fn save(
     if let Err(e) = env_file::merge_keys(&changes) {
         eprintln!("{e}");
         return HttpResponse::InternalServerError()
-            .json(serde_json::json!({ "error": "Failed to save settings" }));
+            .json(serde_json::json!({ "error": "Impossible d'enregistrer les réglages" }));
     }
 
     // Sans ce rechargement, les handlers continueraient de servir l'ancienne

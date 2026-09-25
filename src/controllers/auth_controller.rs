@@ -151,7 +151,7 @@ pub async fn status() -> impl Responder {
 
 /// Page affichée quand la connexion ne peut même pas démarrer.
 fn feedback(success: bool, message: &str) -> HttpResponse {
-    let color = if success { "#22c55e" } else { "#ef4444" };
+    let color = if success { "#9ece6a" } else { "#f7768e" };
     let title = if success { "Connexion réussie" } else { "Connexion échouée" };
     let message = message
         .replace('&', "&amp;")
@@ -170,10 +170,12 @@ fn feedback(success: bool, message: &str) -> HttpResponse {
         ))
 }
 
+/// Palette du back-office (`partials/_dock_base.html`), en dur : ces pages n'ont pas
+/// de template.
 const STYLE: &str = "body{margin:0;min-height:100vh;display:flex;flex-direction:column;\
-align-items:center;justify-content:center;gap:1rem;background:#121212;color:#fff;\
-font-family:sans-serif;text-align:center;padding:2rem}p{color:#a0a0a0;max-width:32rem}\
-a{color:#60a5fa}";
+align-items:center;justify-content:center;gap:0.75rem;background:#16161e;color:#e6e9f5;\
+font:14px/1.4 \"Instrument Sans\",system-ui,sans-serif;text-align:center;padding:2rem}\
+h1{margin:0;font-size:1.35rem}p{margin:0;color:#a3abcf;max-width:32rem}a{color:#7aa2f7}";
 
 /// Page de retour : lit le fragment, l'envoie au serveur, puis efface le jeton de
 /// la barre d'adresse et de l'historique avant de revenir sur `/settings`.
@@ -190,18 +192,19 @@ const CALLBACK_PAGE: &str = r#"<!DOCTYPE html>
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 1rem;
-            background: #121212;
-            color: #fff;
-            font-family: sans-serif;
+            gap: 0.75rem;
+            /* Palette du back-office (partials/_dock_base.html). */
+            background: #16161e;
+            color: #e6e9f5;
+            font: 14px/1.4 "Instrument Sans", system-ui, sans-serif;
             text-align: center;
             padding: 2rem;
         }
-        h1 { margin: 0; }
-        h1.ok { color: #22c55e; }
-        h1.ko { color: #ef4444; }
-        p { color: #a0a0a0; max-width: 32rem; }
-        a { color: #60a5fa; }
+        h1 { margin: 0; font-size: 1.35rem; }
+        h1.ok { color: #9ece6a; }
+        h1.ko { color: #f7768e; }
+        p { margin: 0; color: #a3abcf; max-width: 32rem; }
+        a { color: #7aa2f7; }
     </style>
 </head>
 <body>

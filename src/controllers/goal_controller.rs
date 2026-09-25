@@ -65,7 +65,7 @@ pub async fn save(goals: web::Json<Vec<Goal>>) -> impl Responder {
         Err(e) => {
             eprintln!("{e}");
             HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": "Failed to save goal config"}))
+                .json(serde_json::json!({"error": "Impossible d'enregistrer les objectifs"}))
         }
     }
 }
@@ -145,7 +145,7 @@ fn mutate_manual(id: &str, change: impl FnOnce(&mut Goal)) -> HttpResponse {
         Err(e) => {
             eprintln!("{e}");
             HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": "Failed to save goal config"}))
+                .json(serde_json::json!({"error": "Impossible d'enregistrer les objectifs"}))
         }
     }
 }

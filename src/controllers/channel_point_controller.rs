@@ -60,7 +60,7 @@ pub async fn save(rewards: web::Json<Vec<Alert>>) -> impl Responder {
         Err(e) => {
             eprintln!("{}", e);
             HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": "Failed to save channel points config"}))
+                .json(serde_json::json!({"error": "Impossible d'enregistrer les alertes"}))
         }
     }
 }
