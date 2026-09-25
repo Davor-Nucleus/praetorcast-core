@@ -32,16 +32,17 @@ function mountConfig({ config } = {}) {
     return { ok: true, json: async () => (config || { sections: [] }) };
   };
 
-  const createTextRenderer = new Function(
+  const { createTextRenderer, TEXT_EFFECT_PERIODS } = new Function(
     'document', 'setTimeout', 'clearTimeout',
-    inlineScript('partials/_text_render.html') + '\n; return createTextRenderer;'
+    inlineScript('partials/_text_render.html') +
+      '\n; return { createTextRenderer, TEXT_EFFECT_PERIODS };'
   )(document, () => 0, () => {});
 
   const copied = [];
 
   const api = new Function(
     'document', 'window', 'fetch', 'console', 'location', 'alert', 'confirm',
-    'navigator', 'createTextRenderer',
+    'navigator', 'createTextRenderer', 'TEXT_EFFECT_PERIODS',
     inlineScript('text_config.html') + `
     ; return {
         loadConfig, saveConfig, addSection, deleteSection, updateSection, setEffect,
@@ -57,7 +58,8 @@ function mountConfig({ config } = {}) {
     () => {},
     () => true,
     { clipboard: { writeText: async (t) => { copied.push(t); } } },
-    createTextRenderer
+    createTextRenderer,
+    TEXT_EFFECT_PERIODS
   );
 
   return { api, ids, sent, loadHandlers, copied };

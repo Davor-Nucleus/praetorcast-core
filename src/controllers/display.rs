@@ -78,6 +78,23 @@ struct ChatVerticalTemplate {
 #[template(path = "chat_youtube.html")]
 struct ChatYoutubeTemplate;
 
+// Les trois overlays d'effets lisent leurs réglages sur /api/events_ws : rien à
+// injecter au rendu, et un changement dans /effects-config s'applique en direct.
+#[derive(Template)]
+#[template(path = "emote_rain.html")]
+struct EmoteRainTemplate;
+
+#[derive(Template)]
+#[template(path = "camera_frame.html")]
+struct CameraFrameTemplate;
+
+/// Le spectre vient de JanusCore, comme le titre de `/music-current`.
+#[derive(Template)]
+#[template(path = "music_visualizer.html")]
+struct MusicVisualizerTemplate {
+    music_port: u16,
+}
+
 #[derive(Deserialize)]
 pub struct ClockQuery {
     pub hour: Option<bool>,
@@ -157,4 +174,19 @@ pub async fn chat_vertical() -> impl Responder {
 
 pub async fn chat_youtube() -> impl Responder {
     render(ChatYoutubeTemplate.render().unwrap())
+}
+
+pub async fn emote_rain() -> impl Responder {
+    render(EmoteRainTemplate.render().unwrap())
+}
+
+pub async fn camera_frame() -> impl Responder {
+    render(CameraFrameTemplate.render().unwrap())
+}
+
+pub async fn music_visualizer() -> impl Responder {
+    let config = load_config();
+    render(MusicVisualizerTemplate {
+        music_port: config.port_music,
+    }.render().unwrap())
 }

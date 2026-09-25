@@ -16,6 +16,9 @@ pub enum CardKind {
     Text,
     /// Une ou toutes les barres d'objectif définies dans `/goal-config`.
     Goal,
+    /// Le dernier événement de la chaîne (follow, sub, bits, raid…), lu dans le
+    /// journal `data/events.json`.
+    Event,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -40,6 +43,12 @@ pub struct BannerCard {
     /// Absent — ou introuvable — signifie « tous les objectifs ».
     #[serde(rename = "goalId", default, skip_serializing_if = "Option::is_none")]
     pub goal_id: Option<String>,
+    /// Type d'événement montré par une carte `Event` : `follow`, `sub`, `gift`,
+    /// `cheer`, `raid` ou `channel_points`. Absent signifie « tous », points de
+    /// chaîne exceptés. Gardé en chaîne : le filtre vit côté overlay
+    /// (`partials/_event_card.html`), un type inconnu y retombe sur « aucun ».
+    #[serde(rename = "eventKind", default, skip_serializing_if = "Option::is_none")]
+    pub event_kind: Option<String>,
 }
 
 /// Bord occupé par les barres fixes.
@@ -175,6 +184,7 @@ mod tests {
             order: 0,
             duration_ms: Some(5000),
             goal_id: None,
+            event_kind: None,
         };
         let json = serde_json::to_string(&card).unwrap();
         let deserialized: BannerCard = serde_json::from_str(&json).unwrap();
@@ -245,6 +255,7 @@ mod tests {
             order,
             duration_ms: None,
             goal_id: None,
+            event_kind: None,
         }
     }
 
@@ -357,6 +368,21 @@ mod tests {
         assert_eq!(back.dock.scale, 1.8);
         // `goalId` absent quand il vaut None : pas de `null` dans le fichier.
         assert!(!serde_json::to_string(&config).unwrap().contains("\"goalId\":null"));
+    }
+
+    #[test]
+    fn une_carte_evenement_garde_son_filtre() {
+        let config = parse(r#"{ "cards": [
+            { "id": "e1", "kind": "event", "eventKind": "raid", "transition": "zoom" },
+            { "id": "e2", "kind": "event" }
+        ] }"#);
+        assert_eq!(config.cards[0].kind, CardKind::Event);
+        assert_eq!(config.cards[0].event_kind.as_deref(), Some("raid"));
+        // Sans filtre : tous les événements, et la clé n'est pas réécrite.
+        assert_eq!(config.cards[1].event_kind, None);
+        let json = serde_json::to_string(&config.cards[1]).unwrap();
+        assert!(!json.contains("eventKind"), "{json}");
+        assert!(json.contains(r#""kind":"event""#));
     }
 
     #[test]

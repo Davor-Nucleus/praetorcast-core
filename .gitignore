@@ -99,6 +99,9 @@ public/soundboard/*
 /data/scheduler.json
 /data/channel_points.json
 /data/text.json
+/data/effects.json
+# Journal des derniers follows, subs, raids : pseudos de viewers, rien à versionner.
+/data/events.json
 
 /public/banner/*
 

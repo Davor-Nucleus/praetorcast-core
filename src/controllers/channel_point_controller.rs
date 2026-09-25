@@ -8,6 +8,7 @@ use tokio::sync::broadcast;
 use tokio::time::{sleep, Duration};
 use crate::controllers::upload::{save_upload, AUDIO_EXTENSIONS, IMAGE_EXTENSIONS};
 use crate::models::channel_point::{self, Alert};
+use crate::models::events::{FeedEvent, FeedMessage};
 use crate::twitch::{AlertEvent, TwitchState};
 
 const CHANNELPOINT_DIR: &str = "public/channelpoint";
@@ -75,10 +76,28 @@ pub async fn save(rewards: web::Json<Vec<Alert>>) -> impl Responder {
 /// La réponse renvoie le nombre d'overlays touchés. C'est *la* explication d'un test
 /// resté sans effet : aucune source `/channel-points` ouverte dans OBS ni dans un
 /// onglet. Le dire vaut mieux que laisser chercher.
-pub async fn test(alert: web::Json<Alert>, tests: web::Data<AlertTest>) -> impl Responder {
+pub async fn test(
+    alert: web::Json<Alert>,
+    tests: web::Data<AlertTest>,
+    state: web::Data<Mutex<TwitchState>>,
+) -> impl Responder {
     let alert = channel_point::normalized(alert.into_inner());
     let kind = alert.kind;
     let event = AlertEvent::sample(kind, &alert.reward_title, alert.min_amount);
+
+    // Les overlays d'effets réagissent aussi, pour régler cadre et pluie en même
+    // temps que l'alerte. Marqué `test` : jamais journalisé, et la bannière l'ignore.
+    let feed = state.lock().unwrap().feed.clone();
+    let _ = feed.send(FeedMessage::Event {
+        event: FeedEvent {
+            kind: kind.into(),
+            user_name: event.user_name.clone(),
+            amount: event.amount,
+            months: event.months,
+            at_ms: 0,
+            test: true,
+        },
+    });
 
     let message = serde_json::json!({
         "type": "alert",

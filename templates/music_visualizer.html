@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Music Visualizer</title>
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="viz"></canvas>
+
+    <script>
+        const MUSIC_PORT = {{ music_port }};
+
+        // Montée rapide, descente lente : les barres suivent l'attaque d'une note
+        // sans clignoter quand elle s'éteint. Exprimés par seconde.
+        const ATTACK_PER_S = 30;
+        const RELEASE_PER_S = 2.2;
+
+        const canvas = document.getElementById('viz');
+        const ctx = canvas.getContext('2d');
+
+        let settings = { bars: 48, style: 'bars', sensitivity: 1 };
+        /** Derniers niveaux reçus de JanusCore, 0 à 1 par bande. */
+        let target = [];
+        /** Niveaux affichés, lissés vers `target` à chaque image. */
+        let shown = [];
+        let colors = { a: '#9146FF', b: '#ec4899' };
+        let lastFrame = null;
+
+        /**
+         * Ramène les bandes de JanusCore à `count` barres : moyenne quand il y a
+         * plus de bandes que de barres, interpolation linéaire dans l'autre sens.
+         */
+        function resample(levels, count) {
+            const n = levels.length;
+            if (n === 0 || count <= 0) return new Array(Math.max(0, count)).fill(0);
+            const out = new Array(count);
+            for (let i = 0; i < count; i++) {
+                if (n >= count) {
+                    const from = Math.floor(i * n / count);
+                    const to = Math.max(from + 1, Math.floor((i + 1) * n / count));
+                    let sum = 0;
+                    for (let k = from; k < to; k++) sum += levels[k];
+                    out[i] = sum / (to - from);
+                } else {
+                    const pos = count === 1 ? 0 : i * (n - 1) / (count - 1);
+                    const lo = Math.floor(pos);
+                    const hi = Math.min(n - 1, lo + 1);
+                    out[i] = levels[lo] + (levels[hi] - levels[lo]) * (pos - lo);
+                }
+            }
+            return out;
+        }
+
+        /** Rapproche `current` de `goal` sur `dt` secondes, selon le sens. */
+        function smooth(current, goal, dt) {
+            const rate = goal > current ? ATTACK_PER_S : RELEASE_PER_S;
+            const step = rate * dt;
+            return goal > current ? Math.min(goal, current + step) : Math.max(goal, current - step);
+        }
+
+        /** Octets de JanusCore → niveaux 0..1, amplifiés par la sensibilité. */
+        function applyLevels(bytes) {
+            const gain = Number(settings.sensitivity) || 1;
+            target = bytes.map((b) => Math.min(1, (b / 255) * gain));
+        }
+
+        function applySettings(visualizer) {
+            if (!visualizer) return;
+            settings = {
+                bars: Math.max(8, Math.min(128, Number(visualizer.bars) || 48)),
+                style: ['bars', 'mirror', 'wave'].includes(visualizer.style) ? visualizer.style : 'bars',
+                sensitivity: Number(visualizer.sensitivity) || 1,
+            };
+        }
+
+        function readColors() {
+            const style = getComputedStyle(document.documentElement);
+            colors = {
+                a: style.getPropertyValue('--pc-accent').trim() || colors.a,
+                b: style.getPropertyValue('--pc-accent-2').trim() || colors.b,
+            };
+        }
+
+        function resize() {
+            const ratio = window.devicePixelRatio || 1;
+            canvas.width = Math.round(canvas.clientWidth * ratio);
+            canvas.height = Math.round(canvas.clientHeight * ratio);
+        }
+
+        function gradient(w) {
+            const g = ctx.createLinearGradient(0, 0, w, 0);
+            g.addColorStop(0, colors.a);
+            g.addColorStop(1, colors.b);
+            return g;
+        }
+
+        function draw(values) {
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+            ctx.fillStyle = gradient(w);
+            ctx.strokeStyle = gradient(w);
+
+            const count = values.length;
+            if (count === 0) return;
+
+            if (settings.style === 'wave') {
+                // Courbe lissée par des quadratiques entre les milieux des barres.
+                const step = w / (count - 1 || 1);
+                const y = (v) => h - v * h * 0.95;
+                ctx.beginPath();
+                ctx.moveTo(0, h);
+                ctx.lineTo(0, y(values[0]));
+                for (let i = 1; i < count; i++) {
+                    const mx = (i - 0.5) * step;
+                    const my = (y(values[i - 1]) + y(values[i])) / 2;
+                    ctx.quadraticCurveTo((i - 1) * step, y(values[i - 1]), mx, my);
+                }
+                ctx.lineTo(w, y(values[count - 1]));
+                ctx.lineTo(w, h);
+                ctx.closePath();
+                ctx.globalAlpha = 0.35;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.lineWidth = Math.max(2, h * 0.02);
+                ctx.stroke();
+                return;
+            }
+
+            const slot = w / count;
+            const barW = Math.max(1, slot * 0.72);
+            const radius = Math.min(barW / 2, 8 * (window.devicePixelRatio || 1));
+            for (let i = 0; i < count; i++) {
+                const x = i * slot + (slot - barW) / 2;
+                // Une barre ne descend jamais à zéro pixel : au repos, une ligne fine
+                // montre que l'overlay est là.
+                const barH = Math.max(barW * 0.25, values[i] * h * (settings.style === 'mirror' ? 0.95 : 0.97));
+                const top = settings.style === 'mirror' ? (h - barH) / 2 : h - barH;
+                ctx.beginPath();
+                if (ctx.roundRect) ctx.roundRect(x, top, barW, barH, radius);
+                else ctx.rect(x, top, barW, barH);
+                ctx.fill();
+            }
+        }
+
+        function frame(now) {
+            const dt = lastFrame === null ? 0 : Math.min(0.1, (now - lastFrame) / 1000);
+            lastFrame = now;
+
+            const goal = resample(target, settings.bars);
+            if (shown.length !== goal.length) shown = goal.map(() => 0);
+            shown = shown.map((value, i) => smooth(value, goal[i], dt));
+            draw(shown);
+            requestAnimationFrame(frame);
+        }
+
+        function connectLevels() {
+            const host = window.location.hostname || 'localhost';
+            let ws;
+            try {
+                ws = new WebSocket(`ws://${host}:${MUSIC_PORT}/api/visualizer_ws`);
+            } catch (e) {
+                setTimeout(connectLevels, 5000);
+                return;
+            }
+            ws.addEventListener('message', (evt) => {
+                try {
+                    const bytes = JSON.parse(evt.data);
+                    if (Array.isArray(bytes)) applyLevels(bytes);
+                } catch (e) { /* trame ignorée */ }
+            });
+            // JanusCore arrêté : les barres retombent au lieu de rester figées.
+            ws.addEventListener('close', () => {
+                target = [];
+                setTimeout(connectLevels, 5000);
+            });
+        }
+
+        // Les réglages viennent de /effects-config, par le même flux que les autres
+        // effets : un « Enregistrer » s'applique sans rafraîchir la source.
+        function connectSettings() {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            let ws;
+            try {
+                ws = new WebSocket(`${proto}://${location.host}/api/events_ws`);
+            } catch (e) {
+                setTimeout(connectSettings, 5000);
+                return;
+            }
+            ws.addEventListener('message', (evt) => {
+                try {
+                    const data = JSON.parse(evt.data);
+                    if (data.type === 'config') applySettings(data.effects?.visualizer);
+                } catch (e) { /* trame ignorée */ }
+            });
+            ws.addEventListener('close', () => setTimeout(connectSettings, 5000));
+        }
+
+        window.addEventListener('resize', resize);
+        window.addEventListener('load', () => {
+            resize();
+            readColors();
+            // Le thème peut changer en direct (theme-live.js recharge la feuille).
+            setInterval(readColors, 1000);
+            connectLevels();
+            connectSettings();
+            requestAnimationFrame(frame);
+        });
+    </script>
+</body>
+</html>

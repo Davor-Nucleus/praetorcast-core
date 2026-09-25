@@ -1,4 +1,5 @@
 use crate::models::channel_point::AlertKind;
+use crate::models::events::{self, FeedEvent, FeedKind, FeedMessage};
 use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use futures_util::StreamExt;
@@ -117,6 +118,13 @@ pub struct TwitchState {
     /// seul à la fois (deux sources ouvertes se répartissaient les redemptions), et
     /// elle grossissait sans fin quand personne n'écoutait.
     pub alerts: broadcast::Sender<AlertEvent>,
+    /// Flux des événements pour les overlays d'effets et la bannière : follows
+    /// compris, et tests de `/effects-config`. Distinct de `alerts`, que consomme
+    /// aussi la tâche subathon — un test n'y a pas sa place.
+    pub feed: broadcast::Sender<FeedMessage>,
+    /// Fichier où journaliser les événements. Absent par défaut : c'est ce qui
+    /// empêche les tests d'écrire dans `data/`, qui porte la vraie configuration.
+    pub journal: Option<&'static str>,
 }
 
 impl Default for TwitchState {
@@ -128,8 +136,44 @@ impl Default for TwitchState {
             live: false,
             stream_started_at: None,
             alerts: broadcast::channel(ALERT_BUFFER).0,
+            feed: broadcast::channel(ALERT_BUFFER).0,
+            journal: None,
         }
     }
+}
+
+impl TwitchState {
+    /// État du serveur : journalise les événements dans `data/events.json`.
+    pub fn journaled() -> Self {
+        Self {
+            journal: Some(events::EVENTS_PATH),
+            ..Self::default()
+        }
+    }
+}
+
+/// Horloge murale en millisecondes Unix.
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Journalise un événement et le diffuse aux overlays qui l'écoutent.
+fn publish(state: &Mutex<TwitchState>, event: FeedEvent) {
+    // Copiés hors du verrou : l'écriture du fichier ne doit pas le prolonger.
+    let (journal, feed) = {
+        let g = state.lock().unwrap();
+        (g.journal, g.feed.clone())
+    };
+    if let Some(path) = journal {
+        if let Err(e) = events::record(path, &event) {
+            eprintln!("[Twitch] Journal des événements : {e}");
+        }
+    }
+    // `send` n'échoue que sans overlay connecté.
+    let _ = feed.send(FeedMessage::Event { event });
 }
 
 pub struct TwitchConfig {
@@ -441,10 +485,23 @@ fn notify(data: &Value, state: &Mutex<TwitchState>) {
     match kind {
         "channel.follow" => {
             let name = event["user_name"].as_str().unwrap_or("Inconnu").to_string();
-            let mut g = state.lock().unwrap();
-            g.total_followers += 1;
-            g.last_follower = Some(name.clone());
+            {
+                let mut g = state.lock().unwrap();
+                g.total_followers += 1;
+                g.last_follower = Some(name.clone());
+            }
             println!("[Twitch] Nouveau follower: {name}");
+            publish(
+                state,
+                FeedEvent {
+                    kind: FeedKind::Follow,
+                    user_name: name,
+                    amount: 0,
+                    months: 0,
+                    at_ms: now_ms(),
+                    test: false,
+                },
+            );
         }
         "stream.online" => {
             let started = event["started_at"].as_str().map(str::to_string);
@@ -467,6 +524,17 @@ fn notify(data: &Value, state: &Mutex<TwitchState>) {
                 println!(
                     "[Twitch] Alerte {:?} : {} ({})",
                     alert.kind, alert.user_name, alert.amount
+                );
+                publish(
+                    state,
+                    FeedEvent {
+                        kind: alert.kind.into(),
+                        user_name: alert.user_name.clone(),
+                        amount: alert.amount,
+                        months: alert.months,
+                        at_ms: now_ms(),
+                        test: false,
+                    },
                 );
                 // `send` n'échoue que sans aucun abonné. Depuis que la tâche subathon
                 // en est un permanent, ça ne se produit plus qu'au tout début du
@@ -1092,6 +1160,36 @@ mod tests {
         handle(&follow, &state, &mut recent).unwrap();
 
         assert_eq!(state.lock().unwrap().total_followers, 1);
+    }
+
+    #[test]
+    fn follows_et_alertes_passent_dans_le_flux_des_overlays() {
+        // `default()` ne journalise pas : ce test n'écrit rien dans `data/`.
+        let state = Mutex::new(TwitchState::default());
+        let mut feed = state.lock().unwrap().feed.subscribe();
+        let mut recent = RecentIds::new(RECENT_IDS);
+
+        let notification = |id: &str, kind: &str, event: Value| {
+            json!({
+                "metadata": { "message_id": id, "message_type": "notification", "subscription_type": kind },
+                "payload": { "event": event }
+            })
+        };
+        handle(&notification("f", "channel.follow", json!({ "user_name": "Ronni" })), &state, &mut recent).unwrap();
+        handle(
+            &notification("r", "channel.raid", json!({ "from_broadcaster_user_name": "Raider", "viewers": 42 })),
+            &state,
+            &mut recent,
+        )
+        .unwrap();
+
+        let FeedMessage::Event { event } = feed.try_recv().unwrap() else { panic!("événement attendu") };
+        assert_eq!((event.kind, event.user_name.as_str()), (FeedKind::Follow, "Ronni"));
+
+        let FeedMessage::Event { event } = feed.try_recv().unwrap() else { panic!("événement attendu") };
+        assert_eq!((event.kind, event.amount), (FeedKind::Raid, 42));
+        assert!(event.at_ms > 0);
+        assert!(!event.test);
     }
 
     #[test]

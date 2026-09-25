@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 
 use super::fs_atomic;
+use super::text::{TextAnimation, TextEffect};
 
 /// Ce qui déclenche une alerte.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -59,6 +60,18 @@ pub struct Alert {
     pub transition: String,
     #[serde(rename = "durationMs", default, skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u32>,
+    /// Entrée de la phrase, avec le moteur de `/text` (`partials/_text_render.html`).
+    /// Absente d'une ligne existante : aucune, comme avant.
+    #[serde(rename = "textAnimation", default)]
+    pub text_animation: TextAnimation,
+    /// Effet continu de la phrase. Le défaut est le dégradé animé, qui était le
+    /// seul rendu possible : une ligne existante garde exactement son aspect.
+    #[serde(rename = "textEffect", default = "default_text_effect")]
+    pub text_effect: TextEffect,
+}
+
+fn default_text_effect() -> TextEffect {
+    TextEffect::Gradient
 }
 
 /// Type à jouer quand aucune ligne n'est configurée pour celui reçu.
@@ -267,7 +280,34 @@ mod tests {
             sound_path: String::new(),
             transition: String::new(),
             duration_ms: None,
+            text_animation: TextAnimation::None,
+            text_effect: TextEffect::Gradient,
         }
+    }
+
+    #[test]
+    fn une_ligne_existante_garde_son_degrade_et_n_a_pas_d_entree() {
+        let reward: Alert = serde_json::from_str(
+            r#"{ "reward_title": "X", "phrase": "Merci", "imagePath": "", "soundPath": "" }"#,
+        )
+        .unwrap();
+        assert_eq!(reward.text_animation, TextAnimation::None);
+        assert_eq!(reward.text_effect, TextEffect::Gradient);
+    }
+
+    #[test]
+    fn les_animations_de_texte_se_lisent_et_se_reecrivent() {
+        let reward: Alert = serde_json::from_str(
+            r#"{ "kind": "cheer", "phrase": "", "imagePath": "", "soundPath": "",
+                 "textAnimation": "stamp", "textEffect": "none" }"#,
+        )
+        .unwrap();
+        assert_eq!(reward.text_animation, TextAnimation::Stamp);
+        assert_eq!(reward.text_effect, TextEffect::None);
+
+        let json = serde_json::to_string(&reward).unwrap();
+        assert!(json.contains(r#""textAnimation":"stamp""#), "{json}");
+        assert!(json.contains(r#""textEffect":"none""#), "{json}");
     }
 
     #[test]

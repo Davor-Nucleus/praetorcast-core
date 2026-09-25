@@ -1,0 +1,148 @@
+<!--
+    Carte « Dernier événement », partagée par /banner et /banner-config.
+
+    Même raison d'être que partials/_goal_bars.html : le choix de l'événement et
+    ses libellés existeraient sinon en double, et l'aperçu du configurateur finirait
+    par ne plus montrer ce que la bannière affiche.
+
+    Les événements viennent de /api/events_ws, du plus récent au plus ancien, sous
+    la forme de `models::events::FeedEvent` : { kind, userName, amount, months,
+    atMs, test }. À inclure AVANT le script de la page.
+-->
+<style>
+    .event-card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2em;
+        min-width: 0;
+    }
+
+    .event-label {
+        font-size: calc(var(--event-label-size, clamp(1.1rem, 2.6vw, 2.8rem)) * var(--pc-font-scale, 1));
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--pc-text-muted, rgba(255, 255, 255, 0.65));
+    }
+
+    .event-name {
+        margin: 0;
+        font-size: calc(var(--event-name-size, clamp(2.5rem, 9vw, 9rem)) * var(--pc-font-scale, 1));
+        font-weight: bold;
+        line-height: 1.05;
+        overflow-wrap: anywhere;
+    }
+
+    .event-detail {
+        font-size: calc(var(--event-detail-size, clamp(1.2rem, 3.2vw, 3.4rem)) * var(--pc-font-scale, 1));
+        font-weight: 600;
+        color: var(--pc-text, #ffffff);
+    }
+</style>
+
+<script>
+    /** Filtres proposés par le configurateur : [valeur, libellé]. */
+    const EVENT_CARD_FILTERS = [
+        ['', 'Tous les événements'],
+        ['follow', 'Follows'],
+        ['sub', 'Abonnements'],
+        ['gift', 'Abonnements offerts'],
+        ['cheer', 'Bits'],
+        ['raid', 'Raids'],
+        ['channel_points', 'Points de chaîne'],
+    ];
+
+    /** Types d'événement couverts par chaque filtre. Prime et réabonnement sont des
+     *  abonnements comme les autres pour qui regarde la bannière. */
+    const EVENT_FILTER_KINDS = {
+        follow: ['follow'],
+        sub: ['sub', 'resub', 'prime'],
+        gift: ['gift'],
+        cheer: ['cheer'],
+        raid: ['raid'],
+        channel_points: ['channel_points'],
+    };
+
+    /**
+     * L'événement passe-t-il le filtre d'une carte ?
+     *
+     * Sans filtre, tout sauf les points de chaîne : une récompense échangée toutes
+     * les deux minutes masquerait le dernier sub. Un événement de test n'est jamais
+     * retenu — la bannière afficherait « TestUser » en plein direct.
+     */
+    function eventMatches(event, filter) {
+        if (!event || event.test) return false;
+        if (!filter) return event.kind !== 'channel_points';
+        return (EVENT_FILTER_KINDS[filter] || []).includes(event.kind);
+    }
+
+    /** Le plus récent qui passe le filtre, ou `null`. */
+    function latestEvent(events, filter) {
+        return (events || []).find((event) => eventMatches(event, filter)) || null;
+    }
+
+    function formatCount(value) {
+        return Number(value || 0).toLocaleString('fr-FR');
+    }
+
+    function plural(count, word) {
+        return `${formatCount(count)} ${word}${count > 1 ? 's' : ''}`;
+    }
+
+    /** Titre et précision affichés autour du pseudo. */
+    function describeEvent(event) {
+        const amount = Number(event.amount) || 0;
+        const months = Number(event.months) || 0;
+        switch (event.kind) {
+            case 'follow':
+                return { label: 'Dernier follower', detail: '' };
+            case 'sub':
+                // Twitch compte les paliers en 1000 / 2000 / 3000 ; le tier 1 est la
+                // norme et ne mérite pas de mention.
+                return { label: 'Dernier abonné', detail: amount >= 2000 ? `Tier ${Math.floor(amount / 1000)}` : '' };
+            case 'resub':
+                return { label: 'Dernier abonné', detail: months > 0 ? `${months} mois` : '' };
+            case 'prime':
+                return { label: 'Dernier abonné', detail: 'Prime' };
+            case 'gift':
+                return { label: 'Derniers subs offerts', detail: plural(amount, 'offert') };
+            case 'cheer':
+                return { label: 'Derniers bits', detail: `${formatCount(amount)} bits` };
+            case 'raid':
+                return { label: 'Dernier raid', detail: plural(amount, 'spectateur') };
+            case 'channel_points':
+                return { label: 'Dernière récompense', detail: '' };
+            default:
+                return { label: 'Dernier événement', detail: '' };
+        }
+    }
+
+    /** Contenu de la carte, bâti par API DOM : le pseudo vient de Twitch. */
+    function buildEventCardContent(event) {
+        const { label, detail } = describeEvent(event);
+
+        const card = document.createElement('div');
+        card.className = 'event-card';
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'event-label';
+        labelEl.textContent = label;
+        card.appendChild(labelEl);
+
+        const name = document.createElement('h2');
+        name.className = 'event-name';
+        const inner = document.createElement('span');
+        inner.className = 'gradient-text animate-gradient';
+        inner.textContent = event.userName || '';
+        name.appendChild(inner);
+        card.appendChild(name);
+
+        if (detail) {
+            const detailEl = document.createElement('span');
+            detailEl.className = 'event-detail';
+            detailEl.textContent = detail;
+            card.appendChild(detailEl);
+        }
+        return card;
+    }
+</script>

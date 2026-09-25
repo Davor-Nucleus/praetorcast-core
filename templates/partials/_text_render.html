@@ -504,6 +504,31 @@
 
 <script>
     /**
+     * Période par défaut de chaque effet. Une valeur unique ne peut pas convenir :
+     * un défilement lisible demande une dizaine de secondes, une pulsation moins de
+     * deux. Sert de repli au rendu quand `effectMs` est absent (les alertes n'en
+     * règlent pas), et de valeur proposée par /text-config.
+     */
+    const TEXT_EFFECT_PERIODS = {
+        none: 2000,
+        marquee: 12000,
+        pulse: 1600,
+        wave: 1200,
+        glitch: 2000,
+        gradient: 5000,
+        float: 3500,
+        tilt: 3000,
+        shake: 700,
+        neon: 1800,
+        rainbow: 4000,
+        blink: 1400,
+        heartbeat: 1800,
+        shine: 3000,
+        jelly: 2200,
+        revolve: 6000,
+    };
+
+    /**
      * Rendu d'une section de texte dans `root`.
      *
      * Le contrat tient en deux points :
@@ -589,7 +614,7 @@
             const animation = oneOf(section.animation, ENTRANCES, 'none');
             const effect = oneOf(section.effect, EFFECTS, 'none');
             const animMs = positiveMs(section.animationMs, 800);
-            const effectMs = positiveMs(section.effectMs, 2000);
+            const effectMs = positiveMs(section.effectMs, TEXT_EFFECT_PERIODS[effect] ?? 2000);
             const content = typeof section.content === 'string' ? section.content : '';
 
             const stage = document.createElement('div');

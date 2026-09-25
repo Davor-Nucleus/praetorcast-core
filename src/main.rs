@@ -8,7 +8,7 @@ mod controllers;
 mod twitch;
 mod twitch_auth;
 
-use controllers::{auth_controller, banner_controller, channel_point_controller, display, goal_controller, music_controller, obs_controller, scheduler_controller, settings_controller, text_controller, theme_controller, timer_controller, twitch_controller};
+use controllers::{auth_controller, banner_controller, channel_point_controller, display, effects_controller, goal_controller, music_controller, obs_controller, scheduler_controller, settings_controller, text_controller, theme_controller, timer_controller, twitch_controller};
 use models::config::load_config;
 
 #[actix_web::main]
@@ -16,7 +16,8 @@ async fn main() -> std::io::Result<()> {
     let config = load_config();
     let port = config.port;
 
-    let twitch_data = web::Data::new(Mutex::new(twitch::TwitchState::default()));
+    // Journalise les événements dans data/events.json (carte « Dernier événement »).
+    let twitch_data = web::Data::new(Mutex::new(twitch::TwitchState::journaled()));
     let bg_state = twitch_data.clone().into_inner();
 
     // Réveille la session EventSub quand les identifiants Twitch changent, qu'ils
@@ -71,6 +72,9 @@ async fn main() -> std::io::Result<()> {
             .route("/chat-horizontal", web::get().to(display::chat_horizontal))
             .route("/chat-vertical", web::get().to(display::chat_vertical))
             .route("/chat-youtube", web::get().to(display::chat_youtube))
+            .route("/emote-rain", web::get().to(display::emote_rain))
+            .route("/camera-frame", web::get().to(display::camera_frame))
+            .route("/music-visualizer", web::get().to(display::music_visualizer))
             // Pages de configuration
             .route("/music-config", web::get().to(music_controller::music_config))
             .route("/banner-config", web::get().to(banner_controller::page))
@@ -152,6 +156,14 @@ async fn main() -> std::io::Result<()> {
             // API Twitch
             .route("/api/twitch_ws", web::get().to(twitch_controller::ws_handler))
             .route("/api/twitch/badges", web::get().to(twitch_controller::badges))
+            .route("/api/twitch/emotes", web::get().to(twitch_controller::emotes))
+            // Effets : pluie d'emotes, cadre caméra, visualiseur
+            .route("/effects-config", web::get().to(effects_controller::page))
+            .route("/api/effects-config", web::get().to(effects_controller::get))
+            .route("/api/effects-config", web::post().to(effects_controller::save))
+            .route("/api/effects/test", web::post().to(effects_controller::test))
+            // Flux des événements : bannière (dernier événement) et overlays d'effets
+            .route("/api/events_ws", web::get().to(effects_controller::events_ws))
             // API OBS (limiteur sur la source audio "music")
             .route("/api/obs/limiter_ws", web::get().to(obs_controller::limiter_ws))
             .route("/api/obs/limiter", web::get().to(obs_controller::get_limiter))

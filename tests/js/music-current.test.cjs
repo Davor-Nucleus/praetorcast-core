@@ -31,6 +31,7 @@ function mountOverlay() {
     progressTotal: el('span'),
   };
   ids.progress.hidden = true;
+  const body = el('body');
 
   let now = 0;
   const clock = {
@@ -43,7 +44,7 @@ function mountOverlay() {
     'performance', 'requestAnimationFrame',
     inlineScript() + '\n; return { handleMessage, renderProgress, formatTime };'
   )(
-    makeDocument(ids),
+    Object.assign(makeDocument(ids), { body }),
     { addEventListener() {}, location: { hostname: '127.0.0.1' } },
     function WebSocketStub() { return { addEventListener() {} }; },
     { error() {}, log() {} },
@@ -53,7 +54,7 @@ function mountOverlay() {
     () => 0
   );
 
-  return { api, ids, clock };
+  return { api, ids, clock, body };
 }
 
 /** Un message de JanusCore, piste en cours de lecture. */
@@ -154,6 +155,33 @@ check('une ancienne version de JanusCore (sans position) ne montre pas de barre'
   delete legacy.progress_bar_enabled;
   api.handleMessage(legacy);
   assert.strictEqual(ids.progress.hidden, true);
+});
+
+// ── Mise en page responsive ─────────────────────────────────────────────────
+
+check('la barre affichée signale au CSS de réduire le titre sur une source basse', () => {
+  const { api, body } = mountOverlay();
+  api.handleMessage(message());
+  assert.ok(body.classList.contains('has-progress'));
+  api.handleMessage(message({ progress_bar_enabled: false }));
+  assert.ok(!body.classList.contains('has-progress'));
+});
+
+check('la pause est signalée au CSS, pour arrêter la pochette qui tourne', () => {
+  const { api, body } = mountOverlay();
+  api.handleMessage(message({ paused: true, progress_bar_enabled: false }));
+  assert.ok(body.classList.contains('is-paused'));
+  api.handleMessage(message({ paused: false }));
+  assert.ok(!body.classList.contains('is-paused'));
+});
+
+check('le CSS prévoit la mise en page verticale et garde la taille historique', () => {
+  const html = fs.readFileSync(TPL, 'utf8');
+  assert.ok(/@media \(orientation: portrait\)/.test(html), 'mise en page portrait absente');
+  // 2,5 rem : la taille d'avant le responsive, pour ne rien changer aux sources hautes.
+  assert.ok(html.includes('--size: calc(min(2.5rem, 70vh) * var(--pc-font-scale))'));
+  // L'ancienne règle forçait Arial en taille « medium » sous 768 px de large.
+  assert.ok(!/font-family:\s*Arial/.test(html), 'la police du thème doit rester partout');
 });
 
 console.log(`  ${passed} verification(s) OK`);

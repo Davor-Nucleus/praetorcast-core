@@ -31,6 +31,12 @@ function mountConfig({ fetchImpl } = {}) {
     inlineScript('partials/_goal_bars.html') + '\n; return createGoalBars;'
   )(document);
 
+  const eventCard = new Function(
+    'document',
+    inlineScript('partials/_event_card.html') +
+      '\n; return { EVENT_CARD_FILTERS, latestEvent, buildEventCardContent };'
+  )(document);
+
   const sent = [];
   const fetchStub = fetchImpl || (async (url, init) => {
     sent.push({ url, init });
@@ -41,7 +47,7 @@ function mountConfig({ fetchImpl } = {}) {
 
   const api = new Function(
     'document', 'window', 'fetch', 'WebSocket', 'console', 'location', 'setTimeout',
-    'alert', 'createGoalBars',
+    'alert', 'createGoalBars', 'EVENT_CARD_FILTERS', 'latestEvent', 'buildEventCardContent',
     inlineScript('banner_config.html') + `
     ; return {
         loadConfig, loadGoals, saveConfig, renderAll, renderCards, renderDockPanel,
@@ -52,6 +58,7 @@ function mountConfig({ fetchImpl } = {}) {
         setDock: (v) => { dock = v; },
         setGoals: (v) => { goals = v; },
         setGoalEntries: (v) => { goalEntries = v; },
+        setEvents: (v) => { recentEvents = v; },
     };`
   )(
     document, window, fetchStub,
@@ -60,7 +67,8 @@ function mountConfig({ fetchImpl } = {}) {
     { protocol: 'http:', host: '127.0.0.1:3000', origin: 'http://127.0.0.1:3000' },
     () => 0,
     (m) => alerts.push(m),
-    createGoalBars
+    createGoalBars,
+    eventCard.EVENT_CARD_FILTERS, eventCard.latestEvent, eventCard.buildEventCardContent
   );
 
   return { api, ids, sent, alerts, document };
@@ -103,16 +111,60 @@ await check('un type inconnu retombe sur « texte » plutôt que de passer', () 
   assert.strictEqual(api.getCards()[0].kind, 'text');
 });
 
-await check('la liste se termine par les deux boutons d’ajout', () => {
+await check('la liste se termine par les trois boutons d’ajout', () => {
   const { api, ids } = mountConfig();
   api.setCards([]);
   api.setGoals([]);
   api.renderCards();
   const addRow = ids.cardList.children[ids.cardList.children.length - 1];
   assert.ok(addRow.classList.contains('add-row'));
-  assert.strictEqual(addRow.children.length, 2);
+  assert.strictEqual(addRow.children.length, 3);
   assert.strictEqual(addRow.children[0].textContent, '+ Carte texte / image');
   assert.strictEqual(addRow.children[1].textContent, '+ Carte objectif');
+  assert.strictEqual(addRow.children[2].textContent, '+ Carte événement');
+});
+
+await check('« + Carte événement » crée une carte event, tous événements par défaut', () => {
+  const { api } = mountConfig();
+  api.setCards([]);
+  api.addCard('event');
+  const card = api.getCards()[0];
+  assert.strictEqual(card.kind, 'event');
+  assert.strictEqual(card.eventKind, null);
+});
+
+await check('une carte événement propose le choix du type, pas de champ texte', () => {
+  const { api, ids } = mountConfig();
+  api.setCards([{ id: 'e1', kind: 'event', eventKind: 'raid', transition: 'fade' }]);
+  api.renderCards();
+  const html = ids.cardList.children[0].innerHTML;
+  assert.ok(html.includes('id="event-0"'), 'sélecteur absent');
+  assert.ok(/<option value="raid" selected>Raids<\/option>/.test(html), 'le filtre enregistré doit être présélectionné');
+  assert.ok(!html.includes('id="text-0"'), 'pas de champ texte sur une carte événement');
+  assert.ok(html.includes('Dernier événement'));
+});
+
+await check('l\'aperçu d\'une carte événement montre le vrai dernier événement', () => {
+  const { api, ids } = mountConfig();
+  api.setCards([{ id: 'e1', kind: 'event', eventKind: 'cheer', transition: 'fade' }]);
+  api.setEvents([
+    { kind: 'follow', userName: 'Suiveur', amount: 0, months: 0 },
+    { kind: 'cheer', userName: 'Généreux', amount: 500, months: 0 },
+  ]);
+  api.previewCard(0);
+  const text = ids.previewStage.textContent;
+  assert.ok(text.includes('Généreux'), text);
+  assert.ok(!text.includes('Exemple'), 'un vrai événement ne doit pas être présenté comme un exemple');
+});
+
+await check('sans événement de ce type, l\'aperçu montre un exemple signalé comme tel', () => {
+  const { api, ids } = mountConfig();
+  api.setCards([{ id: 'e1', kind: 'event', eventKind: 'raid', transition: 'fade' }]);
+  api.setEvents([]);
+  api.previewCard(0);
+  const text = ids.previewStage.textContent;
+  assert.ok(text.includes('Dernier raid'), text);
+  assert.ok(text.includes('Exemple'), text);
 });
 
 // ── Éditeur d'une carte ─────────────────────────────────────────────────────

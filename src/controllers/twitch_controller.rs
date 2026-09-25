@@ -23,6 +23,90 @@ pub async fn badges() -> impl Responder {
     }
 }
 
+/// Emotes gardées une heure : la pluie en demande à chaque chargement de source, et
+/// la liste d'une chaîne ne change qu'avec un nouvel emote.
+const EMOTES_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
+
+static EMOTES_CACHE: Mutex<Option<(std::time::Instant, Vec<String>)>> = Mutex::new(None);
+
+/// GET /api/twitch/emotes — images des emotes de la chaîne, pour la pluie d'emotes.
+///
+/// Une chaîne sans emote (pas encore affiliée) retombe sur les emotes globales de
+/// Twitch : une pluie vide ne ressemblerait à rien. Une erreur rend une liste vide,
+/// que l'overlay remplace par ses propres symboles.
+pub async fn emotes() -> impl Responder {
+    if let Some((at, urls)) = EMOTES_CACHE.lock().unwrap().as_ref() {
+        if at.elapsed() < EMOTES_TTL {
+            return HttpResponse::Ok().json(serde_json::json!({ "emotes": urls }));
+        }
+    }
+
+    match fetch_emotes().await {
+        Ok(urls) => {
+            *EMOTES_CACHE.lock().unwrap() = Some((std::time::Instant::now(), urls.clone()));
+            HttpResponse::Ok().json(serde_json::json!({ "emotes": urls }))
+        }
+        Err(e) => {
+            eprintln!("[Twitch] Récupération des emotes impossible: {e}");
+            HttpResponse::Ok().json(serde_json::json!({ "emotes": [] }))
+        }
+    }
+}
+
+async fn fetch_emotes() -> Result<Vec<String>, BoxError> {
+    let twitch = TwitchConfig::from_app(&load_config());
+    let client = reqwest::Client::new();
+    let bid = broadcaster_id(&client, &twitch).await?;
+
+    let channel = emote_urls(
+        &client,
+        &twitch,
+        "https://api.twitch.tv/helix/chat/emotes",
+        Some(("broadcaster_id", bid.as_str())),
+    )
+    .await?;
+    if !channel.is_empty() {
+        return Ok(channel);
+    }
+    emote_urls(&client, &twitch, "https://api.twitch.tv/helix/chat/emotes/global", None).await
+}
+
+async fn emote_urls(
+    client: &reqwest::Client,
+    config: &TwitchConfig,
+    url: &str,
+    query: Option<(&str, &str)>,
+) -> Result<Vec<String>, BoxError> {
+    let mut request = client
+        .get(url)
+        .header("Client-Id", &config.client_id)
+        .header("Authorization", config.bearer());
+    if let Some(q) = query {
+        request = request.query(&[q]);
+    }
+
+    let response = request.send().await?;
+    if !response.status().is_success() {
+        return Err(format!("{url} a renvoyé HTTP {}", response.status()).into());
+    }
+
+    let body: Value = response.json().await?;
+    Ok(emote_images(&body))
+}
+
+/// URL 2x de chaque emote d'une réponse Helix : assez nette pour tomber en grand.
+fn emote_images(body: &Value) -> Vec<String> {
+    body["data"]
+        .as_array()
+        .map(|emotes| {
+            emotes
+                .iter()
+                .filter_map(|e| e["images"]["url_2x"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 async fn fetch_badges() -> Result<Value, BoxError> {
     let twitch = TwitchConfig::from_app(&load_config());
 
@@ -144,4 +228,28 @@ pub async fn ws_handler(
     });
 
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn les_images_2x_sont_extraites_de_la_reponse_helix() {
+        // Forme de la documentation Helix « Get Channel Emotes », abrégée.
+        let body = serde_json::json!({
+            "data": [
+                { "id": "304456832", "name": "twitchdevPitchfork",
+                  "images": { "url_1x": "https://x/1.0", "url_2x": "https://x/2.0", "url_4x": "https://x/3.0" } },
+                { "id": "sans-images", "name": "cassé" }
+            ],
+            "template": "https://static-cdn.jtvnw.net/emoticons/v2/{{id}}/{{format}}/{{theme_mode}}/{{scale}}"
+        });
+        assert_eq!(emote_images(&body), vec!["https://x/2.0".to_string()]);
+    }
+
+    #[test]
+    fn une_reponse_sans_donnees_ne_donne_aucune_emote() {
+        assert!(emote_images(&serde_json::json!({})).is_empty());
+    }
 }

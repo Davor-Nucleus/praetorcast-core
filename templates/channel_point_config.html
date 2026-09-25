@@ -391,6 +391,47 @@
             { value: 'prime', label: 'Abonnement Prime', amount: '' }
         ];
 
+        // Animations de la phrase, rendues par le moteur de /text. Mêmes clés et
+        // libellés que /text-config (vérifié par tests/js/channel-point-config) ;
+        // le défilement en moins, qui ferait sortir la phrase de l'écran.
+        const TEXT_ENTRANCES = [
+            ['none', 'Aucune'],
+            ['fade', 'Fondu'],
+            ['slide', 'Glissement'],
+            ['zoom', 'Zoom'],
+            ['flip', 'Bascule'],
+            ['bounce', 'Rebond'],
+            ['drop', 'Chute'],
+            ['swing', 'Balancement'],
+            ['blur', 'Mise au point'],
+            ['rise', 'Montée'],
+            ['reveal', 'Dévoilement'],
+            ['spin', 'Tournoiement'],
+            ['stamp', 'Tampon'],
+            ['flicker', 'Allumage'],
+            ['typewriter', 'Machine à écrire'],
+            ['cascade', 'Cascade'],
+            ['scatter', 'Dispersion'],
+        ];
+
+        const TEXT_EFFECTS = [
+            ['none', 'Aucun'],
+            ['gradient', 'Dégradé animé'],
+            ['pulse', 'Pulsation'],
+            ['wave', 'Vague'],
+            ['glitch', 'Glitch'],
+            ['float', 'Lévitation'],
+            ['tilt', 'Balancier'],
+            ['shake', 'Tremblement'],
+            ['neon', 'Néon'],
+            ['rainbow', 'Arc-en-ciel'],
+            ['blink', 'Clignotement'],
+            ['heartbeat', 'Battement'],
+            ['shine', 'Reflet'],
+            ['jelly', 'Gelée'],
+            ['revolve', 'Rotation 3D'],
+        ];
+
         function kindOf(reward) {
             return reward.kind || 'channel_points';
         }
@@ -494,6 +535,21 @@
                         </div>
 
                         <div class="text-input-group">
+                            <label for="textAnimation-${index}">Animation de la phrase</label>
+                            <select id="textAnimation-${index}" onchange="updateTextAnimation(${index}, this.value)">
+                                ${renderPairOptions(TEXT_ENTRANCES, reward.textAnimation || 'none')}
+                            </select>
+                        </div>
+
+                        <div class="text-input-group">
+                            <label for="textEffect-${index}">Effet continu de la phrase</label>
+                            <select id="textEffect-${index}" onchange="updateTextEffect(${index}, this.value)">
+                                ${renderPairOptions(TEXT_EFFECTS, reward.textEffect || 'gradient')}
+                            </select>
+                            <small class="field-hint">Les mêmes animations que les textes de /text-config. L'effet démarre à la fin de l'animation d'entrée.</small>
+                        </div>
+
+                        <div class="text-input-group">
                             <label for="transition-${index}">Transition</label>
                             <select id="transition-${index}" onchange="updateTransition(${index}, this.value)">
                                 ${renderTransitionOptions(reward.transition)}
@@ -529,6 +585,12 @@
                 .join('');
         }
 
+        function renderPairOptions(pairs, current) {
+            return pairs
+                .map(([value, label]) => `<option value="${value}" ${value === current ? 'selected' : ''}>${label}</option>`)
+                .join('');
+        }
+
         function renderKindOptions(current) {
             return KINDS
                 .map((k) => `<option value="${k.value}" ${k.value === current ? 'selected' : ''}>${k.label}</option>`)
@@ -543,7 +605,9 @@
                 phrase: '',
                 imagePath: '',
                 soundPath: '',
-                transition: 'fade'
+                transition: 'fade',
+                textAnimation: 'none',
+                textEffect: 'gradient'
             });
             renderCards();
         }
@@ -578,6 +642,14 @@
 
         function updateTransition(index, value) {
             rewards[index].transition = value;
+        }
+
+        function updateTextAnimation(index, value) {
+            rewards[index].textAnimation = value;
+        }
+
+        function updateTextEffect(index, value) {
+            rewards[index].textEffect = value;
         }
 
         async function handleImageUpload(index, event) {

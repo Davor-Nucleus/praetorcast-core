@@ -371,6 +371,18 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            /* Tailles de la carte « Dernier événement » (partials/_event_card.html),
+               réduites à l'échelle de l'aperçu. */
+            --event-name-size: 1.75rem;
+            --event-label-size: 0.75rem;
+            --event-detail-size: 0.95rem;
+        }
+
+        .preview-stage .event-preview {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
         }
 
         .preview-hint {
@@ -529,6 +541,7 @@
     </div>
 
     {% include "partials/_goal_bars.html" %}
+    {% include "partials/_event_card.html" %}
 
     <script>
         // `scale: 1` = la taille prévue par l'habillage bannière, qui se calibre
@@ -543,6 +556,19 @@
         let goals = [];
         /** Mêmes objectifs, valeurs comprises — sert à l'aperçu d'une carte d'objectif. */
         let goalEntries = [];
+        /** Derniers événements, pour l'aperçu d'une carte « Dernier événement ». */
+        let recentEvents = [];
+
+        /** Événement fictif par filtre, pour l'aperçu tant qu'aucun vrai n'est arrivé. */
+        const SAMPLE_EVENTS = {
+            '': { kind: 'follow', userName: 'TestUser', amount: 0, months: 0 },
+            follow: { kind: 'follow', userName: 'TestUser', amount: 0, months: 0 },
+            sub: { kind: 'resub', userName: 'TestUser', amount: 1000, months: 12 },
+            gift: { kind: 'gift', userName: 'TestUser', amount: 5, months: 0 },
+            cheer: { kind: 'cheer', userName: 'TestUser', amount: 1000, months: 0 },
+            raid: { kind: 'raid', userName: 'TestUser', amount: 42, months: 0 },
+            channel_points: { kind: 'channel_points', userName: 'TestUser', amount: 0, months: 0 },
+        };
 
         async function loadConfig() {
             try {
@@ -602,8 +628,22 @@
             return options.join('');
         }
 
+        function eventFilterLabel(value) {
+            const entry = EVENT_CARD_FILTERS.find(([v]) => v === (value || ''));
+            return entry ? entry[1] : 'Tous les événements';
+        }
+
         /** Colonne de gauche : vignette d'image, ou pastille pour une carte d'objectif. */
         function cardThumbnail(card, index) {
+            if (card.kind === 'event') {
+                return `
+                    <div class="goal-badge">
+                        <span class="goal-badge-icon">★</span>
+                        <span class="goal-badge-label">Dernier événement</span>
+                        <span class="goal-badge-target">${escapeHtml(eventFilterLabel(card.eventKind))}</span>
+                    </div>
+                `;
+            }
             if (card.kind === 'goal') {
                 const target = card.goalId
                     ? (goalTitle(card.goalId) || 'Objectif supprimé')
@@ -631,6 +671,21 @@
 
         /** Champ propre au type : le texte pour une carte texte, la cible pour un objectif. */
         function cardMainField(card, index) {
+            if (card.kind === 'event') {
+                const current = card.eventKind || '';
+                const options = EVENT_CARD_FILTERS
+                    .map(([value, label]) =>
+                        `<option value="${escapeAttr(value)}"${value === current ? ' selected' : ''}>${escapeHtml(label)}</option>`)
+                    .join('');
+                return `
+                    <div class="control-group">
+                        <label for="event-${index}" class="control-label">Événement affiché</label>
+                        <select id="event-${index}" class="input-field select-field" onchange="updateCardEventKind(${index}, this.value)">
+                            ${options}
+                        </select>
+                    </div>
+                `;
+            }
             if (card.kind === 'goal') {
                 return `
                     <div class="control-group">
@@ -690,6 +745,7 @@
             addRow.className = 'add-row';
             addRow.appendChild(addButton('+ Carte texte / image', 'text'));
             addRow.appendChild(addButton('+ Carte objectif', 'goal'));
+            addRow.appendChild(addButton('+ Carte événement', 'event'));
             cardList.appendChild(addRow);
         }
 
@@ -704,19 +760,27 @@
         function addCard(kind) {
             bannerCards.push({
                 id: null,
-                kind: kind === 'goal' ? 'goal' : 'text',
+                kind: kind === 'goal' || kind === 'event' ? kind : 'text',
                 text: '',
                 imagePath: '',
                 transition: 'fade',
                 order: bannerCards.length,
                 // Absent = tous les objectifs, le choix le plus utile par défaut.
                 goalId: null,
+                // Absent = tous les événements, points de chaîne exceptés.
+                eventKind: null,
             });
             renderCards();
         }
 
         function updateCardGoal(index, value) {
             bannerCards[index].goalId = value === ALL_GOALS ? null : value;
+            renderCards();
+            refreshPreviewIfActive(index);
+        }
+
+        function updateCardEventKind(index, value) {
+            bannerCards[index].eventKind = value || null;
             renderCards();
             refreshPreviewIfActive(index);
         }
@@ -834,6 +898,11 @@
             // Aperçu texte : plus aucune barre à rafraîchir en arrière-plan.
             previewGoalBars = null;
 
+            if (card.kind === 'event') {
+                previewEventCard(stage, card, transition);
+                return;
+            }
+
             const hasImage = card.imagePath && card.imagePath.trim() !== '';
             stage.innerHTML = `
                 <div class="card-wrapper ${transition}-in">
@@ -885,6 +954,60 @@
 
             previewGoalBars = createGoalBars(holder);
             previewGoalBars.render(entries);
+        }
+
+        /**
+         * Aperçu d'une carte « Dernier événement », avec le vrai dernier événement
+         * s'il y en a un. Sinon un exemple, signalé comme tel : la bannière, elle,
+         * sautera la carte tant qu'aucun événement de ce type n'est arrivé.
+         */
+        function previewEventCard(stage, card, transition) {
+            stage.replaceChildren();
+
+            const wrapper = document.createElement('div');
+            wrapper.className = `card-wrapper ${transition}-in`;
+            const container = document.createElement('div');
+            container.className = 'card-container';
+            const section = document.createElement('div');
+            section.className = 'text-section event-preview';
+
+            const real = latestEvent(recentEvents, card.eventKind);
+            section.appendChild(buildEventCardContent(real || SAMPLE_EVENTS[card.eventKind || ''] || SAMPLE_EVENTS['']));
+            if (!real) {
+                const hint = document.createElement('span');
+                hint.className = 'preview-hint';
+                hint.textContent = 'Exemple — la carte sera sautée tant qu\'aucun événement de ce type n\'est arrivé.';
+                section.appendChild(hint);
+            }
+
+            container.appendChild(section);
+            wrapper.appendChild(container);
+            stage.appendChild(wrapper);
+        }
+
+        function connectEventsWs() {
+            const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+            let ws;
+            try {
+                ws = new WebSocket(`${scheme}://${location.host}/api/events_ws`);
+            } catch (error) {
+                setTimeout(connectEventsWs, 5000);
+                return;
+            }
+            ws.onmessage = (evt) => {
+                let data;
+                try { data = JSON.parse(evt.data); } catch (error) { return; }
+                if (data.type === 'snapshot') {
+                    recentEvents = Array.isArray(data.events) ? data.events : [];
+                } else if (data.type === 'event' && data.event && !data.event.test) {
+                    recentEvents = [data.event, ...recentEvents].slice(0, 20);
+                } else {
+                    return;
+                }
+                if (bannerCards[currentPreviewIndex]?.kind === 'event') previewCard(currentPreviewIndex);
+            };
+            ws.onclose = () => setTimeout(connectEventsWs, 5000);
+            ws.onerror = () => ws.close();
         }
 
         function refreshPreviewIfActive(index) {
@@ -1005,6 +1128,7 @@
             loadConfig();
             loadGoals();
             connectGoalWs();
+            connectEventsWs();
         });
     </script>
 </body>

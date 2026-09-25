@@ -234,9 +234,12 @@
     </div>
 
     {% include "partials/_goal_bars.html" %}
+    {% include "partials/_event_card.html" %}
 
     <script>
         const DEFAULT_DURATION_MS = 6000;
+        /** Même borne que le journal côté serveur (`models::events::KEEP`). */
+        const EVENTS_KEPT = 20;
 
         const overlayEl   = document.getElementById('bannerOverlay');
         const emptyStateEl = document.getElementById('emptyState');
@@ -253,6 +256,8 @@
         let dock = { ...DEFAULT_DOCK };
         /** Toutes les entrées d'objectif avec leurs valeurs, poussées par /api/goal_ws. */
         let goalEntries = [];
+        /** Derniers événements de la chaîne, du plus récent au plus ancien (/api/events_ws). */
+        let recentEvents = [];
 
         /** Rotation effective : les cartes retenues, dans leur ordre. */
         let cards = [];
@@ -307,12 +312,20 @@
          *
          * Une carte d'objectif dont la cible a été supprimée depuis `/goal-config`
          * est retirée du cycle : mieux vaut l'ignorer qu'imposer une carte vide
-         * pendant six secondes à chaque tour.
+         * pendant six secondes à chaque tour. Même règle pour une carte d'événement
+         * tant qu'aucun événement de son type n'est arrivé.
          */
         function buildRotation() {
-            return bannerCards.filter(
-                (c) => c.kind !== 'goal' || entriesFor(c.goalId).length > 0
-            );
+            return bannerCards.filter((c) => {
+                if (c.kind === 'goal') return entriesFor(c.goalId).length > 0;
+                if (c.kind === 'event') return latestEvent(recentEvents, c.eventKind) !== null;
+                return true;
+            });
+        }
+
+        /** Identité d'un événement : suffit à savoir si la carte doit se redessiner. */
+        function eventKey(event) {
+            return event ? `${event.atMs}|${event.kind}|${event.userName}|${event.amount}` : '';
         }
 
         /**
@@ -327,16 +340,22 @@
          */
         function rotationSignature() {
             const cardsPart = bannerCards.map((c) => [
-                c.id || '', c.kind || 'text', c.goalId || '',
+                c.id || '', c.kind || 'text', c.goalId || '', c.eventKind || '',
                 c.text || '', c.imagePath || '', c.transition || '', c.durationMs || 0,
             ]);
             // Les identifiants seuls : c'est ce qui décide quelles cartes et quelles
             // barres fixes ont encore une cible.
             const goalsPart = goalEntries.map((e, i) => (e.config && e.config.id) || '#' + i);
+            // Pour les événements, seule compte leur présence : un nouveau follower
+            // met à jour la carte en place (cf. `updateCardEvent`), il ne relance pas
+            // le cycle.
+            const eventsPart = bannerCards
+                .filter((c) => c.kind === 'event')
+                .map((c) => latestEvent(recentEvents, c.eventKind) !== null);
             const dockPart = dock.enabled
                 ? [dock.position || 'bottom', dock.goalId || '', dockScale()]
                 : null;
-            return JSON.stringify([cardsPart, dockPart, goalsPart]);
+            return JSON.stringify([cardsPart, dockPart, goalsPart, eventsPart]);
         }
 
         function rebuildRotation() {
@@ -406,6 +425,16 @@
             }
         }
 
+        /** Redessine la carte d'événement affichée si un événement plus récent est arrivé. */
+        function updateCardEvent() {
+            const wrapper = currentCardElement;
+            if (!wrapper || wrapper.eventFilter === undefined) return;
+            const event = latestEvent(recentEvents, wrapper.eventFilter);
+            if (!event || eventKey(event) === wrapper.eventShown) return;
+            wrapper.eventShown = eventKey(event);
+            wrapper.eventSection.replaceChildren(buildEventCardContent(event));
+        }
+
         function updateEmptyState() {
             const somethingOnScreen = cards.length > 0 || dockVisible();
             emptyStateEl.style.display = somethingOnScreen ? 'none' : 'flex';
@@ -420,6 +449,7 @@
             }
             updateDock();
             updateCardBars();
+            updateCardEvent();
             updateEmptyState();
         }
 
@@ -491,6 +521,43 @@
             ws.addEventListener('error', () => ws.close());
         }
 
+        /** Applique un message de /api/events_ws. Les réglages d'effets et les tests
+         *  de /effects-config ne concernent pas la bannière. */
+        function applyEventMessage(data) {
+            if (!data) return;
+            if (data.type === 'snapshot') {
+                recentEvents = Array.isArray(data.events) ? data.events : [];
+            } else if (data.type === 'event' && data.event && !data.event.test) {
+                recentEvents = [data.event, ...recentEvents].slice(0, EVENTS_KEPT);
+            } else {
+                return;
+            }
+            applyAll();
+        }
+
+        // Derniers événements, pour les cartes « Dernier événement ».
+        function connectEventsWs() {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            let ws;
+            try {
+                ws = new WebSocket(`${proto}://${location.host}/api/events_ws`);
+            } catch (error) {
+                setTimeout(connectEventsWs, 5000);
+                return;
+            }
+
+            ws.addEventListener('message', (event) => {
+                try {
+                    applyEventMessage(JSON.parse(event.data));
+                } catch (error) {
+                    console.error('Events WS parse error:', error);
+                }
+            });
+
+            ws.addEventListener('close', () => setTimeout(connectEventsWs, 5000));
+            ws.addEventListener('error', () => ws.close());
+        }
+
         async function loadConfigFallback() {
             try {
                 const response = await fetch('/api/banner-config');
@@ -539,6 +606,29 @@
             wrapper.goalBars.render(entriesFor(wrapper.goalCardId));
         }
 
+        /**
+         * Carte « Dernier événement » : même mise en page qu'une carte texte sans
+         * image. Le filtre et l'événement affiché sont mémorisés sur l'élément, pour
+         * que `updateCardEvent` le remplace en place à l'arrivée d'un plus récent.
+         */
+        function buildEventCard(wrapper, card) {
+            const container = document.createElement('div');
+            container.className = 'card-container';
+
+            const section = document.createElement('div');
+            section.className = 'text-section full-width';
+
+            const event = latestEvent(recentEvents, card.eventKind);
+            if (event) section.appendChild(buildEventCardContent(event));
+
+            container.appendChild(section);
+            wrapper.appendChild(container);
+
+            wrapper.eventFilter = card.eventKind || '';
+            wrapper.eventShown = eventKey(event);
+            wrapper.eventSection = section;
+        }
+
         function buildTextCard(wrapper, card) {
             const hasImage = card.imagePath && card.imagePath.trim() !== '';
 
@@ -573,6 +663,8 @@
 
             if (card.kind === 'goal') {
                 buildGoalCard(newCardWrapper, card);
+            } else if (card.kind === 'event') {
+                buildEventCard(newCardWrapper, card);
             } else {
                 buildTextCard(newCardWrapper, card);
             }
@@ -614,6 +706,7 @@
         window.addEventListener('load', () => {
             connectWs();
             connectGoalWs();
+            connectEventsWs();
         });
 
         // Cleanup on unload

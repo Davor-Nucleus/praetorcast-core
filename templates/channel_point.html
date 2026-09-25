@@ -50,34 +50,30 @@
             border-radius: var(--pc-radius);
         }
 
+        /* La phrase passe par le moteur de /text (partials/_text_render.html) :
+           animation d'entrée et effet continu réglés par ligne dans
+           /channel-points-config. Ici, seule la géométrie : la scène du moteur
+           occupe 100 % de la hauteur, elle doit se limiter à son texte sous l'image. */
         .reward-text {
-            margin: 0;
-            font-weight: bold;
-            line-height: 1.1;
-            text-align: center;
-            font-size: calc(clamp(2rem, 6vw, 6rem) * var(--pc-font-scale));
-            overflow-wrap: break-word;
-            word-break: break-word;
+            max-width: 100%;
+        }
+
+        .reward-text .text-stage {
+            height: auto;
+            overflow: visible;
+        }
+
+        .reward-text .text-content {
             text-wrap: balance;
+            font-size: calc(clamp(2rem, 6vw, 6rem) * var(--pc-font-scale));
         }
 
-        /* Dégradé animé sur le texte (identique à la bannière : même token) */
-        .gradient-text {
-            background: var(--pc-gradient);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            background-size: 200% auto;
-        }
-
-        .animate-gradient {
-            animation: gradient 5s ease infinite;
-        }
-
-        @keyframes gradient {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+        /* Les effets qui découpent un dégradé dans le texte le rendent transparent :
+           l'ombre du thème transparaîtrait sous les lettres. */
+        .reward-text .fx-gradient,
+        .reward-text .fx-rainbow,
+        .reward-text .fx-shine {
+            text-shadow: none;
         }
 
         /* Aide au diagnostic hors OBS : n'apparaît que si le navigateur refuse l'autoplay. */
@@ -122,6 +118,8 @@
 </head>
 <body>
     <div class="cp-overlay" id="cpOverlay"></div>
+
+    {% include "partials/_text_render.html" %}
 
     <script>
         // Durée d'affichage quand la récompense n'a pas de son (et filet de sécurité
@@ -214,16 +212,31 @@
 
             const phrase = formatPhrase(config.phrase, event).trim();
             if (phrase) {
-                const paragraph = document.createElement('p');
-                paragraph.className = 'reward-text';
-                const span = document.createElement('span');
-                span.className = 'gradient-text animate-gradient';
-                span.textContent = phrase;
-                paragraph.appendChild(span);
-                wrapper.appendChild(paragraph);
+                const holder = document.createElement('div');
+                holder.className = 'reward-text';
+                // Même rendu que /text : le texte passe par textContent, jamais par
+                // du HTML, alors qu'il contient le pseudo et le message du viewer.
+                createTextRenderer(holder).render(phraseSection(config, phrase));
+                wrapper.appendChild(holder);
             }
 
             return wrapper;
+        }
+
+        /**
+         * Section de texte pour le moteur de /text. Une ligne sans réglage garde le
+         * rendu d'avant l'arrivée des animations : aucune entrée, dégradé animé.
+         * Les périodes des effets sont celles du moteur (`TEXT_EFFECT_PERIODS`).
+         */
+        function phraseSection(config, phrase) {
+            return {
+                content: phrase,
+                animation: config.textAnimation || 'none',
+                effect: config.textEffect || 'gradient',
+                align: 'center',
+                verticalAlign: 'middle',
+                scale: 1,
+            };
         }
 
         // Un navigateur classique refuse `play()` tant que l'utilisateur n'a pas

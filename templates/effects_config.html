@@ -1,0 +1,512 @@
+{% import "partials/_macros.html" as ui -%}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Effets</title>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --bg-card: #1e1e1e;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --border-light: #333333;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #2563eb;
+            --accent-glow: #60a5fa;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --spacing-sm: 0.5rem;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
+            --spacing-xl: 2rem;
+            --radius-md: 0.375rem;
+            --radius-lg: 0.5rem;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-glow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: "Instrument Sans", sans-serif;
+        }
+
+        .page-container {
+            min-height: 100vh;
+            padding: var(--spacing-xl);
+            max-width: 60rem;
+            margin: 0 auto;
+        }
+
+        {% include "partials/_header.html" %}
+
+        .btn {
+            padding: var(--spacing-sm) var(--spacing-lg);
+            border-radius: var(--radius-md);
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+        }
+
+        .btn-save {
+            background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--border-light);
+            color: var(--text-muted);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--accent-primary);
+            color: var(--text-main);
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .card-head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin: 0;
+            color: var(--accent-glow);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+            gap: var(--spacing-md);
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .control-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .input-field {
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            color: var(--text-main);
+            padding: var(--spacing-sm) var(--spacing-md);
+            font-size: 1rem;
+            font-family: inherit;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .hint {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        /* Un déclencheur par ligne : la case, puis son seuil quand il en a un. */
+        .trigger {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            padding: var(--spacing-sm) 0;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .trigger:last-child { border-bottom: none; }
+
+        .trigger .toggle { flex: 1; }
+
+        .trigger .threshold {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .trigger .threshold .input-field { width: 7rem; }
+
+        .toggles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-lg);
+            margin-top: var(--spacing-md);
+        }
+
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+
+        .toggle input {
+            width: 1.1rem;
+            height: 1.1rem;
+            accent-color: var(--accent-primary);
+            cursor: pointer;
+        }
+
+        .section-sep {
+            margin: var(--spacing-lg) 0 var(--spacing-sm);
+        }
+
+        .url-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-top: var(--spacing-lg);
+            padding-top: var(--spacing-md);
+            border-top: 1px solid var(--border-light);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .url-row code {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-light);
+            padding: 0.3rem 0.6rem;
+            border-radius: var(--radius-md);
+            color: var(--accent-glow);
+        }
+
+        /* Accusé de réception flottant, comme dans /timer-config. */
+        .toast {
+            position: fixed;
+            top: var(--spacing-lg);
+            right: var(--spacing-lg);
+            z-index: 10;
+            max-width: min(24rem, calc(100vw - 2rem));
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-left: 4px solid var(--accent-primary);
+            border-radius: var(--radius-md);
+            padding: 0.75rem var(--spacing-md);
+            font-size: 0.9rem;
+            line-height: 1.4;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+            opacity: 0;
+            transform: translateY(-0.5rem);
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .toast.show { opacity: 1; transform: none; }
+        .toast.saved { border-left-color: var(--success); color: var(--success); }
+        .toast.error { border-left-color: var(--danger); color: var(--danger); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .toast { transition: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <div class="page-container">
+
+        {% call ui::header("Effets", "Pluie d'emotes, cadre caméra et visualiseur audio", "saveConfig()", "Sauvegarder", "") %}
+
+        <!-- ── Pluie d'emotes ─────────────────────────────────────────────── -->
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">Pluie d'emotes</h2>
+                <button class="btn btn-ghost" onclick="testEffect('rain')">▶ Tester dans OBS</button>
+            </div>
+            <p class="hint">Les emotes de ta chaîne tombent sur l'écran quand un de ces événements arrive. Sans emote de chaîne, ce sont les emotes globales de Twitch.</p>
+
+            <div class="trigger">
+                <label class="toggle"><input type="checkbox" id="rainOnRaid"> Raid</label>
+                <span class="threshold">à partir de <input type="number" min="0" step="1" class="input-field" id="rainRaidMin"> spectateurs</span>
+            </div>
+            <div class="trigger">
+                <label class="toggle"><input type="checkbox" id="rainOnCheer"> Bits</label>
+                <span class="threshold">à partir de <input type="number" min="0" step="100" class="input-field" id="rainCheerMin"> bits</span>
+            </div>
+            <div class="trigger">
+                <label class="toggle"><input type="checkbox" id="rainOnGift"> Abonnements offerts</label>
+                <span class="threshold">à partir de <input type="number" min="1" step="1" class="input-field" id="rainGiftMin"> offerts</span>
+            </div>
+            <div class="trigger">
+                <label class="toggle"><input type="checkbox" id="rainOnSub"> Abonnements et réabonnements</label>
+            </div>
+            <div class="trigger">
+                <label class="toggle"><input type="checkbox" id="rainOnGoal"> Objectif atteint (barres de /goal-config)</label>
+            </div>
+
+            <div class="grid section-sep">
+                <div class="field">
+                    <label class="control-label" for="rainCount">Nombre d'emotes</label>
+                    <input type="number" min="5" max="300" step="5" class="input-field" id="rainCount">
+                </div>
+                <div class="field">
+                    <label class="control-label" for="rainDuration">Durée de chute (s)</label>
+                    <input type="number" min="1" max="20" step="0.5" class="input-field" id="rainDuration">
+                </div>
+                <div class="field">
+                    <label class="control-label" for="rainSize">Taille</label>
+                    <input type="number" min="0.3" max="3" step="0.1" class="input-field" id="rainSize">
+                </div>
+            </div>
+
+            <div class="url-row">
+                Source navigateur plein écran (1920×1080) :
+                <code>/emote-rain</code>
+                <button class="btn btn-ghost" onclick="copyUrl('/emote-rain', this)">Copier le lien</button>
+            </div>
+        </section>
+
+        <!-- ── Cadre caméra ───────────────────────────────────────────────── -->
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">Cadre caméra</h2>
+                <button class="btn btn-ghost" onclick="testEffect('frame')">▶ Tester dans OBS</button>
+            </div>
+            <p class="hint">Une bordure aux couleurs du thème, à poser par-dessus la webcam. Elle s'illumine à chaque événement ; plus le montant est gros, plus l'éclat est fort.</p>
+
+            <div class="grid">
+                <div class="field">
+                    <label class="control-label" for="frameThickness">Épaisseur (px)</label>
+                    <input type="number" min="1" max="40" step="1" class="input-field" id="frameThickness">
+                </div>
+                <div class="field">
+                    <label class="control-label" for="frameIntensity">Intensité de l'éclat</label>
+                    <input type="number" min="0.2" max="3" step="0.1" class="input-field" id="frameIntensity">
+                </div>
+            </div>
+
+            <div class="toggles">
+                <label class="toggle"><input type="checkbox" id="frameAnimated"> Dégradé tournant</label>
+                <label class="toggle"><input type="checkbox" id="frameGlow"> Halo permanent</label>
+                <label class="toggle"><input type="checkbox" id="framePulse"> Éclat sur les événements</label>
+                <label class="toggle"><input type="checkbox" id="framePulseOnFollow"> … y compris les follows</label>
+            </div>
+
+            <div class="url-row">
+                Source navigateur à la taille de la webcam :
+                <code>/camera-frame</code>
+                <button class="btn btn-ghost" onclick="copyUrl('/camera-frame', this)">Copier le lien</button>
+            </div>
+        </section>
+
+        <!-- ── Visualiseur audio ──────────────────────────────────────────── -->
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">Visualiseur audio</h2>
+            </div>
+            <p class="hint">Des barres qui suivent la musique jouée par JanusCore. Le volume n'y change rien : même à zéro, les barres bougent.</p>
+
+            <div class="grid">
+                <div class="field">
+                    <label class="control-label" for="vizBars">Nombre de barres</label>
+                    <input type="number" min="8" max="128" step="1" class="input-field" id="vizBars">
+                </div>
+                <div class="field">
+                    <label class="control-label" for="vizStyle">Style</label>
+                    <select class="input-field" id="vizStyle">
+                        <option value="bars">Barres</option>
+                        <option value="mirror">Miroir</option>
+                        <option value="wave">Courbe</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label class="control-label" for="vizSensitivity">Sensibilité</label>
+                    <input type="number" min="0.3" max="3" step="0.1" class="input-field" id="vizSensitivity">
+                </div>
+            </div>
+
+            <div class="url-row">
+                Source navigateur, par exemple 1200×200 :
+                <code>/music-visualizer</code>
+                <button class="btn btn-ghost" onclick="copyUrl('/music-visualizer', this)">Copier le lien</button>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+
+        let toastTimer = null;
+
+        function setStatus(message, kind) {
+            const toast = $('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${kind || ''}`;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => { toast.className = 'toast'; }, 3500);
+        }
+
+        function number(id, fallback) {
+            const value = Number($(id).value);
+            return Number.isFinite(value) ? value : fallback;
+        }
+
+        /** Réglages tels que saisis. Le serveur borne et renvoie la version retenue. */
+        function readForm() {
+            return {
+                rain: {
+                    onRaid: $('rainOnRaid').checked,
+                    raidMin: Math.max(0, Math.round(number('rainRaidMin', 0))),
+                    onCheer: $('rainOnCheer').checked,
+                    cheerMin: Math.max(0, Math.round(number('rainCheerMin', 500))),
+                    onGift: $('rainOnGift').checked,
+                    giftMin: Math.max(0, Math.round(number('rainGiftMin', 5))),
+                    onSub: $('rainOnSub').checked,
+                    onGoal: $('rainOnGoal').checked,
+                    count: Math.round(number('rainCount', 60)),
+                    // Saisie en secondes, plus lisible ; stockée en millisecondes.
+                    durationMs: Math.round(number('rainDuration', 5) * 1000),
+                    size: number('rainSize', 1),
+                },
+                frame: {
+                    thickness: Math.round(number('frameThickness', 6)),
+                    animated: $('frameAnimated').checked,
+                    glow: $('frameGlow').checked,
+                    pulse: $('framePulse').checked,
+                    pulseOnFollow: $('framePulseOnFollow').checked,
+                    intensity: number('frameIntensity', 1),
+                },
+                visualizer: {
+                    bars: Math.round(number('vizBars', 48)),
+                    style: $('vizStyle').value,
+                    sensitivity: number('vizSensitivity', 1),
+                },
+            };
+        }
+
+        function fillForm(config) {
+            const { rain, frame, visualizer } = config;
+            $('rainOnRaid').checked = rain.onRaid;
+            $('rainRaidMin').value = rain.raidMin;
+            $('rainOnCheer').checked = rain.onCheer;
+            $('rainCheerMin').value = rain.cheerMin;
+            $('rainOnGift').checked = rain.onGift;
+            $('rainGiftMin').value = rain.giftMin;
+            $('rainOnSub').checked = rain.onSub;
+            $('rainOnGoal').checked = rain.onGoal;
+            $('rainCount').value = rain.count;
+            $('rainDuration').value = rain.durationMs / 1000;
+            $('rainSize').value = rain.size;
+
+            $('frameThickness').value = frame.thickness;
+            $('frameAnimated').checked = frame.animated;
+            $('frameGlow').checked = frame.glow;
+            $('framePulse').checked = frame.pulse;
+            $('framePulseOnFollow').checked = frame.pulseOnFollow;
+            $('frameIntensity').value = frame.intensity;
+
+            $('vizBars').value = visualizer.bars;
+            $('vizStyle').value = visualizer.style;
+            $('vizSensitivity').value = visualizer.sensitivity;
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/effects-config');
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                fillForm(await response.json());
+            } catch (e) {
+                setStatus('Chargement impossible : ' + e.message, 'error');
+            }
+        }
+
+        async function saveConfig() {
+            try {
+                const response = await fetch('/api/effects-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(readForm()),
+                });
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                // Le serveur renvoie les valeurs bornées : les afficher évite de
+                // croire qu'un « 1000 emotes » a été retenu.
+                fillForm(await response.json());
+                setStatus('Réglages enregistrés — les sources se mettent à jour toutes seules.', 'saved');
+            } catch (e) {
+                setStatus('Échec de l\'enregistrement : ' + e.message, 'error');
+            }
+        }
+
+        async function testEffect(effect) {
+            try {
+                const response = await fetch('/api/effects/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ effect }),
+                });
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const { sources } = await response.json();
+                // Les réglages non enregistrés ne sont pas pris en compte : l'overlay
+                // lit ceux du serveur.
+                setStatus(
+                    sources > 0
+                        ? 'Effet envoyé. Pense à enregistrer pour tester de nouveaux réglages.'
+                        : 'Aucune source ouverte : ajoute l\'overlay dans OBS (ou ouvre-le dans un onglet).',
+                    sources > 0 ? 'saved' : 'error'
+                );
+            } catch (e) {
+                setStatus('Test impossible : ' + e.message, 'error');
+            }
+        }
+
+        function copyUrl(path, button) {
+            // Résolu contre l'origine courante, comme « Copier le lien » du bandeau.
+            const url = new URL(path, location.origin).href;
+            const label = button.textContent;
+            const done = () => {
+                button.textContent = 'Lien copié';
+                setTimeout(() => { button.textContent = label; }, 1500);
+            };
+            if (!navigator.clipboard) {
+                window.prompt('Copiez le lien :', url);
+                return;
+            }
+            navigator.clipboard.writeText(url).then(done, () => window.prompt('Copiez le lien :', url));
+        }
+
+        window.addEventListener('load', loadConfig);
+    </script>
+</body>
+</html>

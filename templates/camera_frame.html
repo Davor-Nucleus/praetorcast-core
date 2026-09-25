@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Camera Frame</title>
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            /* Posé par-dessus la webcam : le centre doit rester vide. */
+            background: transparent;
+        }
+
+        /* Angle du dégradé, déclaré pour pouvoir être animé. */
+        @property --angle {
+            syntax: '<angle>';
+            inherits: false;
+            initial-value: 0deg;
+        }
+
+        /* Le halo est porté par un parent : un `filter` sur le cadre lui-même
+           serait appliqué avant son masque, et le masque l'effacerait. */
+        .frame-wrap {
+            position: fixed;
+            inset: 0;
+            --t: 6px;
+            --strength: 1;
+            --rest-glow: 0px;
+            filter: drop-shadow(0 0 var(--rest-glow) var(--pc-accent));
+        }
+
+        .frame-wrap.glow {
+            --rest-glow: calc(var(--t) * 1.2);
+        }
+
+        /* Bordure en dégradé : le fond couvre toute la boîte, le masque n'en garde
+           que l'anneau de `padding` — une `border` ne sait pas porter un dégradé
+           qui tourne. */
+        .frame {
+            position: absolute;
+            inset: 0;
+            box-sizing: border-box;
+            padding: var(--t);
+            border-radius: var(--pc-radius);
+            background: conic-gradient(from var(--angle),
+                var(--pc-accent), var(--pc-accent-2), var(--pc-accent));
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+        }
+
+        .frame.animated {
+            animation: frame-spin 6s linear infinite;
+        }
+
+        @keyframes frame-spin {
+            to { --angle: 360deg; }
+        }
+
+        /* Éclat : halo et luminosité qui retombent. `--strength` suit la taille de
+           l'événement (cf. `pulseStrength`). */
+        .frame-wrap.pulse {
+            animation: frame-pulse 1.6s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        @keyframes frame-pulse {
+            0% {
+                filter: drop-shadow(0 0 calc(var(--rest-glow) + var(--t) * 3 * var(--strength)) var(--pc-accent))
+                        brightness(calc(1 + 0.7 * var(--strength)));
+            }
+            100% {
+                filter: drop-shadow(0 0 var(--rest-glow) var(--pc-accent)) brightness(1);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .frame.animated, .frame-wrap.pulse { animation: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="frame-wrap glow" id="frameWrap">
+        <div class="frame animated" id="frame"></div>
+    </div>
+
+    <script>
+        const wrap = document.getElementById('frameWrap');
+        const frame = document.getElementById('frame');
+
+        let frameConfig = null;
+
+        /**
+         * Force de l'éclat pour un événement, `0` s'il ne doit pas en provoquer.
+         *
+         * Un follow reste discret, un sub franc ; bits, dons et raids grandissent avec
+         * leur montant, en logarithme pour qu'un raid de 500 ne vaille pas cent fois
+         * un raid de 5.
+         */
+        function pulseStrength(event, config) {
+            if (!event || !config || !config.pulse) return 0;
+            const amount = Number(event.amount) || 0;
+            let base;
+            switch (event.kind) {
+                case 'follow':
+                    if (!config.pulseOnFollow) return 0;
+                    base = 0.5;
+                    break;
+                case 'channel_points':
+                    base = 0.6;
+                    break;
+                case 'sub':
+                case 'resub':
+                case 'prime':
+                    base = 1;
+                    break;
+                case 'cheer':
+                    base = 0.6 + Math.log10(amount + 1) / 3;
+                    break;
+                case 'gift':
+                case 'raid':
+                    base = 0.8 + Math.log10(amount + 1) / 2;
+                    break;
+                default:
+                    return 0;
+            }
+            return Math.min(base, 2) * config.intensity;
+        }
+
+        function applyConfig(config) {
+            frameConfig = config;
+            if (!config) return;
+            wrap.style.setProperty('--t', config.thickness + 'px');
+            wrap.classList.toggle('glow', !!config.glow);
+            frame.classList.toggle('animated', !!config.animated);
+        }
+
+        function pulse(strength) {
+            if (!(strength > 0)) return;
+            wrap.style.setProperty('--strength', strength.toFixed(2));
+            // Retirer puis remettre la classe relance l'animation, même en cours.
+            wrap.classList.remove('pulse');
+            void wrap.offsetWidth;
+            wrap.classList.add('pulse');
+        }
+
+        function handleMessage(data) {
+            if (!data) return;
+            if (data.type === 'config') {
+                applyConfig(data.effects?.frame || null);
+            } else if (data.type === 'event') {
+                pulse(pulseStrength(data.event, frameConfig));
+            } else if (data.type === 'effect-test' && data.effect === 'frame') {
+                pulse(1.5 * (frameConfig?.intensity ?? 1));
+            }
+        }
+
+        function connect() {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            let ws;
+            try {
+                ws = new WebSocket(`${proto}://${location.host}/api/events_ws`);
+            } catch (e) {
+                setTimeout(connect, 3000);
+                return;
+            }
+            ws.addEventListener('message', (evt) => {
+                try { handleMessage(JSON.parse(evt.data)); } catch (e) { /* trame ignorée */ }
+            });
+            ws.addEventListener('close', () => setTimeout(connect, 3000));
+        }
+
+        wrap.addEventListener('animationend', () => wrap.classList.remove('pulse'));
+        window.addEventListener('load', connect);
+    </script>
+</body>
+</html>

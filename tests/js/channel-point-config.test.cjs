@@ -48,7 +48,7 @@ function mountConfig({ respond } = {}) {
     'document', 'window', 'fetch', 'console', 'alert',
     inlineScript('channel_point_config.html') + `
     ; return {
-        testCard,
+        testCard, renderCards,
         setRewards: (v) => { rewards = v; },
     };`
   )(document, window, fetchStub, { error() {}, log() {} }, () => {});
@@ -168,6 +168,63 @@ await check('un succès efface l’avertissement du test précédent', async () 
   overlays = 1;
   await api.testCard(0);
   assert.ok(!ids['testStatus-0'].classList.contains('is-warning'), 'avertissement resté posé');
+});
+
+// ── Animations de la phrase ─────────────────────────────────────────────────
+
+/** Paires `['clé', 'Libellé']` d'une constante de liste, lues dans le fichier. */
+function pairsOf(file, name) {
+  const html = fs.readFileSync(`${TPL_DIR}/${file}`, 'utf8');
+  const block = new RegExp(`const ${name} = \\[([\\s\\S]*?)\\];`).exec(html)[1];
+  return Array.from(block.matchAll(/\['([a-z]+)',\s*'([^']+)'\]/g), (m) => [m[1], m[2]]);
+}
+
+await check('les animations proposées sont celles de /text-config, mêmes libellés', () => {
+  const textEntrances = pairsOf('text_config.html', 'ENTRANCES');
+  const textEffects = pairsOf('text_config.html', 'EFFECTS');
+  const entrances = pairsOf('channel_point_config.html', 'TEXT_ENTRANCES');
+  const effects = pairsOf('channel_point_config.html', 'TEXT_EFFECTS');
+
+  // Garde-fou : une regex qui cesserait de capturer rendrait le test muet.
+  assert.ok(textEntrances.length >= 17 && textEffects.length >= 16, 'listes de /text-config non capturées');
+
+  // Toutes les entrées, et tous les effets sauf le défilement.
+  assert.deepStrictEqual(
+    [...entrances].sort(),
+    [...textEntrances].sort()
+  );
+  assert.deepStrictEqual(
+    [...effects].sort(),
+    textEffects.filter(([v]) => v !== 'marquee').sort()
+  );
+});
+
+await check('une ligne présélectionne ses animations enregistrées', () => {
+  const { api, ids } = mountConfig();
+  api.setRewards([{ ...cheerRow(), textAnimation: 'stamp', textEffect: 'neon' }]);
+  api.renderCards();
+  const html = ids.cardList.children[0].innerHTML;
+  assert.ok(html.includes('<option value="stamp" selected>Tampon</option>'), 'entrée non présélectionnée');
+  assert.ok(html.includes('<option value="neon" selected>Néon</option>'), 'effet non présélectionné');
+});
+
+await check('une ligne sans réglage montre le rendu d\'avant : aucune entrée, dégradé', () => {
+  const { api, ids } = mountConfig();
+  api.setRewards([cheerRow()]);
+  api.renderCards();
+  const html = ids.cardList.children[0].innerHTML;
+  assert.ok(html.includes('<option value="none" selected>Aucune</option>'));
+  assert.ok(html.includes('<option value="gradient" selected>Dégradé animé</option>'));
+});
+
+await check('le test joue les animations choisies, même non enregistrées', async () => {
+  const { api, sent } = mountConfig();
+  const row = { ...cheerRow(), textAnimation: 'typewriter', textEffect: 'wave' };
+  api.setRewards([row]);
+  await api.testCard(0);
+  const body = JSON.parse(sent[0].init.body);
+  assert.strictEqual(body.textAnimation, 'typewriter');
+  assert.strictEqual(body.textEffect, 'wave');
 });
 
 console.log(`  ${passed} verification(s) OK`);

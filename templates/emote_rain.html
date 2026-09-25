@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Emote Rain</title>
+    <link id="pc-theme" rel="stylesheet" href="/theme.css">
+    <script src="/public/js/theme-live.js" defer></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            /* Incrustation plein écran : rien ne doit masquer la scène. */
+            background: transparent;
+        }
+
+        .drop {
+            position: absolute;
+            top: 0;
+            left: var(--x);
+            width: var(--size);
+            height: var(--size);
+            object-fit: contain;
+            /* Hors champ au départ : l'animation la fait entrer par le haut. */
+            transform: translate3d(-50%, -120%, 0);
+            animation: fall var(--duration) linear var(--delay) forwards;
+            will-change: transform;
+        }
+
+        /* Symbole de repli quand aucune emote n'a pu être chargée. */
+        span.drop {
+            font-size: var(--size);
+            line-height: 1;
+            text-align: center;
+        }
+
+        /* Chute avec un léger balancement : `--sway` décale la trajectoire, `--spin`
+           fait tourner l'emote sur elle-même. */
+        @keyframes fall {
+            0%   { transform: translate3d(-50%, -120%, 0) rotate(0); }
+            50%  { transform: translate3d(calc(-50% + var(--sway)), 50vh, 0) rotate(calc(var(--spin) / 2)); }
+            100% { transform: translate3d(-50%, calc(100vh + 120%), 0) rotate(var(--spin)); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .drop { animation-duration: 0.01ms; }
+        }
+    </style>
+</head>
+<body>
+    <script>
+        // Plafond d'emotes à l'écran, toutes averses confondues : un raid suivi d'une
+        // rafale de bits ne doit pas figer la source OBS.
+        const MAX_ON_SCREEN = 600;
+        // Symboles de repli quand /api/twitch/emotes ne rend rien (Twitch injoignable).
+        const FALLBACK = ['🎉', '✨', '💜', '⭐', '🔥'];
+
+        let rain = null;
+        let emotes = [];
+        /** Objectifs déjà atteints ; `null` tant que le premier état n'est pas connu. */
+        let reached = null;
+
+        /** L'événement doit-il faire pleuvoir, selon les réglages de /effects-config ? */
+        function shouldRain(event, config) {
+            if (!event || !config) return false;
+            const amount = Number(event.amount) || 0;
+            switch (event.kind) {
+                case 'raid':  return config.onRaid && amount >= config.raidMin;
+                case 'cheer': return config.onCheer && amount >= config.cheerMin;
+                case 'gift':  return config.onGift && amount >= config.giftMin;
+                case 'sub':
+                case 'resub':
+                case 'prime': return config.onSub;
+                default:      return false;
+            }
+        }
+
+        /** Objectifs atteints : une cible nulle ne compte pas, elle l'est d'office. */
+        function reachedIds(entries) {
+            const ids = new Set();
+            (entries || []).forEach((entry, i) => {
+                const target = Number(entry?.config?.target) || 0;
+                if (target > 0 && Number(entry.percent) >= 100) ids.add(entry.config.id || '#' + i);
+            });
+            return ids;
+        }
+
+        /**
+         * Objectifs qui viennent d'être atteints. Le premier état reçu sert de point de
+         * départ : une source ouverte sur un objectif déjà rempli ne doit pas pleuvoir.
+         */
+        function newlyReached(previous, entries) {
+            const now = reachedIds(entries);
+            if (previous === null) return { reached: now, count: 0 };
+            let count = 0;
+            for (const id of now) if (!previous.has(id)) count++;
+            return { reached: now, count };
+        }
+
+        function pick(list, random) {
+            return list[Math.floor(random() * list.length) % list.length];
+        }
+
+        /** Lâche une averse. `random` injectable pour les tests. */
+        function startRain(config, random = Math.random) {
+            if (!config) return 0;
+            const room = MAX_ON_SCREEN - document.body.querySelectorAll('.drop').length;
+            const count = Math.max(0, Math.min(config.count, room));
+            const duration = config.durationMs;
+            // 5,2 % de la hauteur : 56 px sur une source 1080p, à `size` 1.
+            const size = 5.2 * config.size;
+
+            for (let i = 0; i < count; i++) {
+                const url = emotes.length > 0 ? pick(emotes, random) : null;
+                const drop = document.createElement(url ? 'img' : 'span');
+                drop.className = 'drop';
+                if (url) {
+                    drop.src = url;
+                    drop.alt = '';
+                } else {
+                    drop.textContent = pick(FALLBACK, random);
+                }
+                // Départs étalés sur la première moitié : une averse, pas un mur.
+                drop.style.setProperty('--x', (random() * 100).toFixed(2) + 'vw');
+                drop.style.setProperty('--delay', Math.round(random() * duration * 0.5) + 'ms');
+                drop.style.setProperty('--duration', Math.round(duration * (0.75 + random() * 0.5)) + 'ms');
+                drop.style.setProperty('--size', (size * (0.7 + random() * 0.6)).toFixed(2) + 'vh');
+                drop.style.setProperty('--sway', ((random() - 0.5) * 16).toFixed(2) + 'vw');
+                drop.style.setProperty('--spin', Math.round((random() - 0.5) * 720) + 'deg');
+                drop.addEventListener('animationend', () => drop.remove());
+                document.body.appendChild(drop);
+            }
+            return count;
+        }
+
+        function handleMessage(data) {
+            if (!data) return;
+            if (data.type === 'config') {
+                rain = data.effects?.rain || null;
+            } else if (data.type === 'event' && shouldRain(data.event, rain)) {
+                startRain(rain);
+            } else if (data.type === 'effect-test' && data.effect === 'rain') {
+                startRain(rain);
+            }
+        }
+
+        function handleGoals(payload) {
+            const result = newlyReached(reached, payload?.goals);
+            reached = result.reached;
+            if (result.count > 0 && rain?.onGoal) startRain(rain);
+        }
+
+        async function loadEmotes() {
+            try {
+                const response = await fetch('/api/twitch/emotes');
+                const body = response.ok ? await response.json() : null;
+                emotes = Array.isArray(body?.emotes) ? body.emotes : [];
+            } catch (e) {
+                emotes = [];
+            }
+        }
+
+        function connect(path, onMessage) {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            let ws;
+            try {
+                ws = new WebSocket(`${proto}://${location.host}${path}`);
+            } catch (e) {
+                setTimeout(() => connect(path, onMessage), 3000);
+                return;
+            }
+            ws.addEventListener('message', (evt) => {
+                try { onMessage(JSON.parse(evt.data)); } catch (e) { /* trame ignorée */ }
+            });
+            ws.addEventListener('close', () => setTimeout(() => connect(path, onMessage), 3000));
+        }
+
+        window.addEventListener('load', () => {
+            loadEmotes();
+            connect('/api/events_ws', handleMessage);
+            connect('/api/goal_ws', handleGoals);
+        });
+    </script>
+</body>
+</html>
