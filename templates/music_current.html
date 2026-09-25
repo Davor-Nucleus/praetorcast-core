@@ -25,11 +25,65 @@
 
         h1 {
             font-size: calc(2.5em * var(--pc-font-scale));
-            text-align: center;
+            text-align: left;
             font-family: var(--pc-font);
             margin: 0;
             opacity: 0;
             min-width: 10px;
+        }
+
+        /* Titre et barre de progression empilés : la barre prend la largeur du
+           titre, avec un minimum pour qu'un titre court garde une barre lisible. */
+        .track {
+            display: flex;
+            flex-direction: column;
+            gap: calc(0.6em * var(--pc-font-scale));
+            min-width: 0;
+        }
+
+        .progress {
+            display: flex;
+            flex-direction: column;
+            gap: calc(0.35em * var(--pc-font-scale));
+            min-width: calc(18em * var(--pc-font-scale));
+            font-size: calc(1em * var(--pc-font-scale));
+        }
+
+        /* `display: flex` l'emporterait sur l'attribut `hidden` sans cette règle. */
+        .progress[hidden] {
+            display: none;
+        }
+
+        .progress-bar {
+            position: relative;
+            height: calc(0.4em * var(--pc-font-scale));
+            border-radius: var(--pc-radius-sm);
+            overflow: hidden;
+        }
+
+        /* Rail en couleur de texte atténuée : `--pc-panel` est presque noir, donc
+           invisible sur le fond de cet overlay. */
+        .progress-bar::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: var(--pc-text);
+            opacity: 0.18;
+        }
+
+        .progress-fill {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, var(--pc-accent), var(--pc-accent-2));
+            transform-origin: left center;
+            transform: scaleX(0);
+        }
+
+        .progress-times {
+            display: flex;
+            justify-content: space-between;
+            color: var(--pc-text-muted);
+            font-variant-numeric: tabular-nums;
         }
 
         /* Animations */
@@ -100,7 +154,17 @@
 </head>
 <body>
     <div id="iconWrapper" class="music-icon music-title"></div>
-    <h1 id="musicTitle" class="music-title"></h1>
+    <div class="track">
+        <h1 id="musicTitle" class="music-title"></h1>
+        <!-- Activée depuis /music-config ; masquée tant que la durée est inconnue. -->
+        <div id="progress" class="progress" hidden>
+            <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+            <div class="progress-times">
+                <span id="progressElapsed">0:00</span>
+                <span id="progressTotal">0:00</span>
+            </div>
+        </div>
+    </div>
 
     <script>
         const MUSIC_PORT = {{ music_port }};
@@ -113,6 +177,68 @@
         let isAnimating = false;
         const titleElement = document.getElementById('musicTitle');
         const iconWrapper = document.getElementById('iconWrapper');
+        const progressEl = document.getElementById('progress');
+        const progressFill = document.getElementById('progressFill');
+        const progressElapsed = document.getElementById('progressElapsed');
+        const progressTotal = document.getElementById('progressTotal');
+
+        // Position extrapolée ici : JanusCore n'envoie une ancre qu'aux changements
+        // d'état (piste, pause, reprise), pas à chaque seconde.
+        // { positionMs, at, paused, durationMs } — `at` en temps de performance.now().
+        let progressAnchor = null;
+        let shownSecond = -1;
+
+        /** 65000 → "1:05" ; au-delà d'une heure, "1:02:05". */
+        function formatTime(ms) {
+            const total = Math.max(0, Math.floor(ms / 1000));
+            const s = String(total % 60).padStart(2, "0");
+            const minutes = Math.floor(total / 60);
+            if (minutes < 60) return `${minutes}:${s}`;
+            return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}:${s}`;
+        }
+
+        /** Position à l'instant `now`, bornée à la durée de la piste. */
+        function progressAt(anchor, now) {
+            const elapsed = anchor.paused ? 0 : now - anchor.at;
+            return Math.min(Math.max(anchor.positionMs + elapsed, 0), anchor.durationMs);
+        }
+
+        /** Prend une nouvelle ancre, ou masque la barre si elle n'a rien à montrer. */
+        function applyProgress(data, now) {
+            const durationMs = data?.metadata?.duration_ms;
+            const show = data?.progress_bar_enabled === true
+                && data?.has_sink === true
+                && typeof durationMs === "number" && durationMs > 0
+                && typeof data?.position_ms === "number";
+
+            progressEl.hidden = !show;
+            if (!show) {
+                progressAnchor = null;
+                return;
+            }
+
+            progressAnchor = { positionMs: data.position_ms, at: now, paused: data.paused === true, durationMs };
+            progressTotal.textContent = formatTime(durationMs);
+            shownSecond = -1;
+            renderProgress(now);
+        }
+
+        function renderProgress(now) {
+            if (!progressAnchor) return;
+            const position = progressAt(progressAnchor, now);
+            // `transform` plutôt que `width` : animé par le compositeur, sans relayout.
+            progressFill.style.transform = `scaleX(${position / progressAnchor.durationMs})`;
+            const second = Math.floor(position / 1000);
+            if (second !== shownSecond) {
+                shownSecond = second;
+                progressElapsed.textContent = formatTime(position);
+            }
+        }
+
+        function tick() {
+            renderProgress(performance.now());
+            requestAnimationFrame(tick);
+        }
 
         async function updateMusic(newTitle, coverArt) {
             if (newTitle === displayedMusic && coverArt === currentCoverArt && displayedMusic !== "") return;
@@ -164,6 +290,18 @@
             isAnimating = false;
         }
 
+        function handleMessage(data) {
+            const current = data?.current_music ?? "";
+            const coverArt = data?.metadata?.cover_art ?? null;
+            const newMusicTitle = current ? current.split(".")[0] : "";
+
+            if (newMusicTitle !== currentMusic || coverArt !== currentCoverArt) {
+                currentMusic = newMusicTitle;
+                updateMusic(newMusicTitle, coverArt);
+            }
+            applyProgress(data, performance.now());
+        }
+
         function initSocket() {
             const host = window.location.hostname || "localhost";
             const wsUrl = `ws://${host}:${MUSIC_PORT}/api/current_music_ws`;
@@ -187,15 +325,7 @@
                 } catch (e) {
                     return;
                 }
-
-                const current = data?.current_music ?? "";
-                const coverArt = data?.metadata?.cover_art ?? null;
-                const newMusicTitle = current ? current.split(".")[0] : "";
-
-                if (newMusicTitle !== currentMusic || coverArt !== currentCoverArt) {
-                    currentMusic = newMusicTitle;
-                    updateMusic(newMusicTitle, coverArt);
-                }
+                handleMessage(data);
             });
 
             ws.addEventListener("close", () => {
@@ -214,6 +344,7 @@
         // Initialize on load
         window.addEventListener('load', () => {
             initSocket();
+            requestAnimationFrame(tick);
         });
 
         // Cleanup on unload

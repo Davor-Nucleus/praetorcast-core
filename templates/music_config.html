@@ -260,6 +260,14 @@
             </div>
             <div class="control-row">
                 <div class="label-val">
+                    <span class="label">BARRE DE PROGRESSION</span>
+                </div>
+                <div class="btn-group" style="margin-top: 4px;">
+                    <button class="btn btn-norm-off" id="progressBtn" onclick="toggleProgressBar()" title="Barre de progression de l'overlay /music-current">OVERLAY : -</button>
+                </div>
+            </div>
+            <div class="control-row">
+                <div class="label-val">
                     <span class="label">Limiteur OBS <span id="obsThreshold">-</span> dB</span>
                 </div>
                 <div class="btn-group">
@@ -372,6 +380,28 @@
                 btn.textContent = 'EBU R128 : OFF';
                 btn.className = 'btn btn-norm-off';
             }
+        }
+
+        // Barre de progression de /music-current : portée par JanusCore, auquel
+        // l'overlay est connecté — elle apparaît ou disparaît sans rafraîchir OBS.
+        async function updateProgressBar() {
+            const data = await fetchMusic("/api/progress_bar");
+            if (data && typeof data.progress_bar_enabled === "boolean") {
+                setProgressBarUI(data.progress_bar_enabled);
+            }
+        }
+
+        async function toggleProgressBar() {
+            const data = await fetchMusic("/api/progress_bar/toggle");
+            if (data && typeof data.progress_bar_enabled === "boolean") {
+                setProgressBarUI(data.progress_bar_enabled);
+            }
+        }
+
+        function setProgressBarUI(enabled) {
+            const btn = document.getElementById('progressBtn');
+            btn.textContent = enabled ? 'OVERLAY : ON' : 'OVERLAY : OFF';
+            btn.className = enabled ? 'btn btn-norm-on' : 'btn btn-norm-off';
         }
 
         // Limiteur OBS : endpoints same-origin servis par praetorcast-core
@@ -508,6 +538,7 @@
             await loadFolders();
             updateVolume("get");
             updateNormalization();
+            updateProgressBar();
             updateObsLimiter("get");
             initMusicWS();
             initObsLimiterWS();
@@ -516,6 +547,7 @@
             intervalId = setInterval(() => {
                 updateVolume("get");
                 updateNormalization();
+                updateProgressBar();
             }, 1000);
         }
 
