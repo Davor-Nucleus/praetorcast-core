@@ -9,6 +9,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
+use super::fs_atomic;
+
 /// Ce qui déclenche une alerte.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[serde(rename_all = "snake_case")]
@@ -145,10 +147,7 @@ pub fn read() -> Result<Vec<Alert>, String> {
             let default: Vec<Alert> = Vec::new();
             let json = serde_json::to_string_pretty(&default)
                 .map_err(|e| format!("Error serializing default: {}", e))?;
-            fs::create_dir_all("data")
-                .map_err(|e| format!("Error creating data dir: {}", e))?;
-            fs::write("data/channel_points.json", json)
-                .map_err(|e| format!("Error writing channel_points.json: {}", e))?;
+            fs_atomic::write("data/channel_points.json", &json)?;
             return Ok(Vec::new());
         }
         Err(e) => return Err(format!("Error reading channel_points.json: {}", e)),
@@ -161,10 +160,7 @@ pub fn read() -> Result<Vec<Alert>, String> {
 pub fn write(rewards: Vec<Alert>) -> Result<(), String> {
     let json = serde_json::to_string_pretty(&rewards)
         .map_err(|e| format!("Error serializing: {}", e))?;
-    fs::create_dir_all("data")
-        .map_err(|e| format!("Error creating data dir: {}", e))?;
-    fs::write("data/channel_points.json", json)
-        .map_err(|e| format!("Error writing channel_points.json: {}", e))
+    fs_atomic::write("data/channel_points.json", &json)
 }
 
 #[cfg(test)]

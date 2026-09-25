@@ -176,14 +176,7 @@ fn write_unlocked(goals: &[Goal]) -> Result<(), String> {
         goals: goals.to_vec(),
     };
     let json = serde_json::to_string_pretty(&file).map_err(|e| format!("Error serializing: {e}"))?;
-    fs::create_dir_all("data").map_err(|e| format!("Error creating data dir: {e}"))?;
-
-    let tmp = format!("{GOAL_PATH}.tmp");
-    fs::write(&tmp, json).map_err(|e| format!("Error writing goal.json: {e}"))?;
-    fs::rename(&tmp, GOAL_PATH).map_err(|e| {
-        let _ = fs::remove_file(&tmp);
-        format!("Error replacing goal.json: {e}")
-    })
+    super::fs_atomic::write(GOAL_PATH, &json)
 }
 
 pub fn read() -> Result<Vec<Goal>, String> {

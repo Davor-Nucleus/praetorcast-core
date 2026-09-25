@@ -311,14 +311,7 @@ fn read_unlocked() -> Result<Timer, String> {
 /// pas étroite.
 fn write_unlocked(timer: &Timer) -> Result<(), String> {
     let json = serde_json::to_string_pretty(timer).map_err(|e| format!("Error serializing: {e}"))?;
-    fs::create_dir_all("data").map_err(|e| format!("Error creating data dir: {e}"))?;
-
-    let tmp = format!("{TIMER_PATH}.tmp");
-    fs::write(&tmp, json).map_err(|e| format!("Error writing timer.json: {e}"))?;
-    fs::rename(&tmp, TIMER_PATH).map_err(|e| {
-        let _ = fs::remove_file(&tmp);
-        format!("Error replacing timer.json: {e}")
-    })
+    super::fs_atomic::write(TIMER_PATH, &json)
 }
 
 pub fn read() -> Result<Timer, String> {

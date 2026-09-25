@@ -14,6 +14,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
+use super::fs_atomic;
+
 const THEME_PATH: &str = "data/theme.json";
 
 /// Nom de la famille déclarée par le `@font-face` généré. Les overlays ne
@@ -180,8 +182,7 @@ pub fn read() -> Result<Theme, String> {
 pub fn write(theme: &Theme) -> Result<(), String> {
     let json =
         serde_json::to_string_pretty(theme).map_err(|e| format!("Error serializing theme: {e}"))?;
-    fs::create_dir_all("data").map_err(|e| format!("Error creating data dir: {e}"))?;
-    fs::write(THEME_PATH, json).map_err(|e| format!("Error writing theme.json: {e}"))
+    fs_atomic::write(THEME_PATH, &json)
 }
 
 #[cfg(test)]

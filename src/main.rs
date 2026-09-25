@@ -20,7 +20,8 @@ async fn main() -> std::io::Result<()> {
     let bg_state = twitch_data.clone().into_inner();
 
     // Réveille la session EventSub quand les identifiants Twitch changent, qu'ils
-    // viennent de /settings ou du renouvellement automatique du jeton.
+    // viennent de /settings ou du bouton « Connecter Twitch ». Il n'y a pas de
+    // renouvellement automatique : le jeton *implicit grant* n'a pas de refresh.
     let reload = Arc::new(Notify::new());
     let reload_data = web::Data::new(reload.clone());
 

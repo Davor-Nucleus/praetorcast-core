@@ -1,17 +1,34 @@
 use crate::models::channel_point::AlertKind;
+use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::Serialize;
 use serde_json::{json, Value};
+use tokio::net::TcpStream;
 use tokio::sync::{broadcast, Notify};
-use tokio::time::{sleep, Duration};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio::time::{sleep, timeout, Duration};
+use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
 const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws";
 
 /// Nombre d'alertes gardées en tampon pour un consommateur momentanément à la traîne.
 const ALERT_BUFFER: usize = 32;
+
+/// Délai de keepalive retenu tant que Twitch n'en a pas annoncé un, en secondes.
+const DEFAULT_KEEPALIVE_SECS: u64 = 10;
+
+/// Marge accordée au-delà du délai de keepalive avant de déclarer la connexion morte :
+/// Twitch envoie son `session_keepalive` *au plus tard* à l'échéance, pas avant.
+const KEEPALIVE_MARGIN: Duration = Duration::from_secs(5);
+
+/// Temps laissé à la connexion de remplacement pour envoyer son `session_welcome`.
+const RECONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Nombre d'identifiants de notification retenus pour écarter les redélivrances.
+const RECENT_IDS: usize = 256;
+
+type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 /// Événement digne d'une alerte à l'écran.
 ///
@@ -139,6 +156,58 @@ impl TwitchConfig {
 
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
+/// Identifiants des dernières notifications traitées.
+///
+/// EventSub garantit une livraison « au moins une fois » : une notification peut
+/// arriver deux fois, y compris sur deux connexions différentes autour d'une
+/// reconnexion. Sans filtre, un abonnement redélivré jouait deux alertes et ajoutait
+/// deux fois son temps au subathon.
+struct RecentIds {
+    order: VecDeque<String>,
+    seen: HashSet<String>,
+    capacity: usize,
+}
+
+impl RecentIds {
+    fn new(capacity: usize) -> Self {
+        Self {
+            order: VecDeque::with_capacity(capacity),
+            seen: HashSet::with_capacity(capacity),
+            capacity,
+        }
+    }
+
+    /// Vrai à la première rencontre de `id`, faux pour une redélivrance. Au-delà de
+    /// la capacité, le plus ancien identifiant est oublié.
+    fn first_time(&mut self, id: &str) -> bool {
+        if self.seen.contains(id) {
+            return false;
+        }
+        if self.order.len() == self.capacity {
+            if let Some(oldest) = self.order.pop_front() {
+                self.seen.remove(&oldest);
+            }
+        }
+        self.order.push_back(id.to_string());
+        self.seen.insert(id.to_string());
+        true
+    }
+}
+
+/// Ce que la boucle de connexion doit faire après un message.
+#[derive(Debug, PartialEq)]
+enum Flow {
+    Continue,
+    /// Première trame d'une connexion. `keepalive` est absent quand Twitch ne
+    /// l'annonce pas : on garde alors le délai en cours.
+    Welcome {
+        session_id: String,
+        keepalive: Option<Duration>,
+    },
+    /// Twitch va fermer la connexion et donne l'URL de sa remplaçante.
+    Reconnect(String),
+}
+
 /// Boucle EventSub.
 ///
 /// Les identifiants sont relus **à chaque tour** plutôt que capturés au démarrage :
@@ -148,6 +217,8 @@ pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// (ce qui, avec un jeton encore valide, pourrait ne jamais arriver).
 pub async fn run(state: Arc<Mutex<TwitchState>>, reload: Arc<Notify>) {
     let client = Client::new();
+    // Vit hors des sessions : une redélivrance peut arriver sur la connexion suivante.
+    let mut recent = RecentIds::new(RECENT_IDS);
     loop {
         let config = TwitchConfig::from_app(&crate::models::config::load_config());
 
@@ -160,7 +231,7 @@ pub async fn run(state: Arc<Mutex<TwitchState>>, reload: Arc<Notify>) {
         }
 
         tokio::select! {
-            result = session(&client, &config, &state) => {
+            result = session(&client, &config, &state, &mut recent) => {
                 if let Err(e) = result {
                     eprintln!("[Twitch] Erreur: {e}");
                 }
@@ -175,10 +246,15 @@ pub async fn run(state: Arc<Mutex<TwitchState>>, reload: Arc<Notify>) {
     }
 }
 
+/// Une session EventSub : identification, connexion, souscriptions, puis lecture
+/// jusqu'à l'erreur. Ne rend la main **que** sur erreur — `run` relance alors une
+/// session complète. Une reconnexion demandée par Twitch se traite ici, sans
+/// resouscrire.
 async fn session(
     client: &Client,
     config: &TwitchConfig,
     state: &Arc<Mutex<TwitchState>>,
+    recent: &mut RecentIds,
 ) -> Result<(), BoxError> {
     let bid = broadcaster_id(client, config).await?;
 
@@ -190,80 +266,215 @@ async fn session(
     }
 
     let (mut ws, _) = connect_async(EVENTSUB_URL).await?;
+    let mut keepalive = Duration::from_secs(DEFAULT_KEEPALIVE_SECS);
     let mut subscribed = false;
 
-    while let Some(msg) = ws.next().await {
-        let Message::Text(text) = msg? else { continue };
-        let data: Value = match serde_json::from_str(&text) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
+    loop {
+        let data = next_message(&mut ws, keepalive).await?;
 
-        match data["metadata"]["message_type"].as_str().unwrap_or("") {
-            "session_welcome" if !subscribed => {
-                let sid = data["payload"]["session"]["id"]
-                    .as_str()
-                    .ok_or("session_id manquant")?
-                    .to_string();
-                subscribe_all(client, config, &bid, &sid).await?;
-                subscribed = true;
-                state.lock().unwrap().connected = true;
-                println!("[Twitch] EventSub actif (session: {sid})");
-            }
-            // Un bras par type serait sept bras gardés dans le `match` extérieur :
-            // on descend d'un niveau plutôt que d'empiler les gardes.
-            "notification" => {
-                let kind = data["metadata"]["subscription_type"].as_str().unwrap_or("");
-                let event = &data["payload"]["event"];
-
-                match kind {
-                    "channel.follow" => {
-                        let name = event["user_name"].as_str().unwrap_or("Inconnu").to_string();
-                        let mut g = state.lock().unwrap();
-                        g.total_followers += 1;
-                        g.last_follower = Some(name.clone());
-                        println!("[Twitch] Nouveau follower: {name}");
-                    }
-                    "stream.online" => {
-                        let started = event["started_at"].as_str().map(str::to_string);
-                        let mut g = state.lock().unwrap();
-                        g.live = true;
-                        g.stream_started_at = started;
-                        println!("[Twitch] Stream en ligne");
-                    }
-                    "stream.offline" => {
-                        let mut g = state.lock().unwrap();
-                        g.live = false;
-                        g.stream_started_at = None;
-                        println!("[Twitch] Stream hors ligne");
-                    }
-                    _ => {
-                        if let Some(alert) = alert_from(kind, event) {
-                            // Le `Sender` est cloné hors du verrou : `send` est un
-                            // point d'attente potentiel et le garde ne doit jamais
-                            // traverser un `.await`.
-                            let sender = state.lock().unwrap().alerts.clone();
-                            println!(
-                                "[Twitch] Alerte {:?} : {} ({})",
-                                alert.kind, alert.user_name, alert.amount
-                            );
-                            // `send` n'échoue que sans aucun abonné. Depuis que la
-                            // tâche subathon en est un permanent, ça ne se produit
-                            // plus qu'au tout début du démarrage.
-                            let _ = sender.send(alert);
-                        }
-                    }
+        match handle(&data, state, recent)? {
+            Flow::Continue => {}
+            Flow::Welcome { session_id, keepalive: announced } => {
+                keepalive = announced.unwrap_or(keepalive);
+                if !subscribed {
+                    subscribe_all(client, config, &bid, &session_id).await?;
+                    subscribed = true;
+                    state.lock().unwrap().connected = true;
+                    println!("[Twitch] EventSub actif (session: {session_id})");
                 }
             }
-            "session_reconnect" => {
+            Flow::Reconnect(url) => {
                 println!("[Twitch] Reconnexion demandée par Twitch");
-                break;
+                let (replacement, announced) =
+                    switch_connection(&mut ws, &url, keepalive, state, recent).await?;
+                // L'ancienne connexion est fermée en étant remplacée.
+                ws = replacement;
+                keepalive = announced.unwrap_or(keepalive);
+                println!("[Twitch] Connexion EventSub transférée, souscriptions conservées");
             }
+        }
+    }
+}
+
+/// Prochain message texte de la socket, décodé.
+///
+/// Chaque attente est bornée par le délai de keepalive : Twitch envoie au moins un
+/// `session_keepalive` par période, un silence plus long signale donc une connexion
+/// morte à moitié (réseau coupé, veille). Sans cette borne, `next()` attendait
+/// indéfiniment et plus aucune alerte n'arrivait, sans rien dans les logs.
+///
+/// Annulable sans perte dans un `select!` : un message lu est rendu aussitôt.
+async fn next_message(ws: &mut Socket, keepalive: Duration) -> Result<Value, BoxError> {
+    loop {
+        let msg = match timeout(keepalive + KEEPALIVE_MARGIN, ws.next()).await {
+            Err(_) => return Err("keepalive dépassé — connexion EventSub présumée morte".into()),
+            Ok(None) => return Err("connexion EventSub fermée".into()),
+            Ok(Some(msg)) => msg?,
+        };
+
+        match msg {
+            Message::Text(text) => {
+                if let Ok(data) = serde_json::from_str(&text) {
+                    return Ok(data);
+                }
+            }
+            Message::Close(frame) => {
+                let detail = frame
+                    .map(|f| format!("{} {}", u16::from(f.code), f.reason))
+                    .unwrap_or_default();
+                return Err(format!("connexion EventSub fermée par Twitch ({detail})").into());
+            }
+            // Les pings sont répondus par tungstenite ; ils comptent comme activité.
             _ => {}
         }
     }
+}
 
-    Ok(())
+/// Bascule sur l'URL de remplacement fournie par `session_reconnect`.
+///
+/// Twitch transfère les souscriptions à la nouvelle connexion : on ne resouscrit pas.
+/// L'ancienne continue de recevoir des événements tant que la nouvelle n'a pas reçu
+/// son `session_welcome`, d'où la lecture des deux en parallèle — attendre en
+/// ignorant l'ancienne perdrait ce qui tombe pendant la bascule.
+///
+/// Rend la nouvelle connexion et le keepalive qu'elle annonce. En cas d'échec, l'erreur
+/// remonte et `run` refait une session complète.
+async fn switch_connection(
+    old: &mut Socket,
+    url: &str,
+    keepalive: Duration,
+    state: &Mutex<TwitchState>,
+    recent: &mut RecentIds,
+) -> Result<(Socket, Option<Duration>), BoxError> {
+    let (mut replacement, _) = timeout(RECONNECT_TIMEOUT, connect_async(url))
+        .await
+        .map_err(|_| "délai de connexion à l'URL de reconnexion dépassé")??;
+
+    let deadline = sleep(RECONNECT_TIMEOUT);
+    tokio::pin!(deadline);
+    let mut old_open = true;
+
+    loop {
+        tokio::select! {
+            data = next_message(&mut replacement, keepalive) => {
+                if let Flow::Welcome { keepalive: announced, .. } = handle(&data?, state, recent)? {
+                    let _ = timeout(Duration::from_secs(1), old.close(None)).await;
+                    return Ok((replacement, announced));
+                }
+            }
+            data = next_message(old, keepalive), if old_open => match data {
+                Ok(data) => {
+                    handle(&data, state, recent)?;
+                }
+                // Twitch ferme l'ancienne connexion de lui-même : c'est attendu.
+                Err(_) => old_open = false,
+            },
+            _ = &mut deadline => {
+                return Err("session_welcome de la connexion de remplacement non reçu".into());
+            }
+        }
+    }
+}
+
+/// Traite un message EventSub et dit à la boucle de connexion quoi faire ensuite.
+///
+/// Séparé des sockets pour être testable : tout ce qui touche à l'état et aux
+/// alertes passe par ici, quelle que soit la connexion d'où vient le message.
+fn handle(
+    data: &Value,
+    state: &Mutex<TwitchState>,
+    recent: &mut RecentIds,
+) -> Result<Flow, BoxError> {
+    match data["metadata"]["message_type"].as_str().unwrap_or("") {
+        "session_welcome" => {
+            let session_id = data["payload"]["session"]["id"]
+                .as_str()
+                .ok_or("session_id manquant")?
+                .to_string();
+            Ok(Flow::Welcome {
+                session_id,
+                keepalive: keepalive_of(data),
+            })
+        }
+        "session_reconnect" => {
+            let url = data["payload"]["session"]["reconnect_url"]
+                .as_str()
+                .ok_or("reconnect_url manquant")?;
+            Ok(Flow::Reconnect(url.to_string()))
+        }
+        "notification" => {
+            let id = data["metadata"]["message_id"].as_str().unwrap_or("");
+            if !id.is_empty() && !recent.first_time(id) {
+                println!("[Twitch] Notification déjà traitée ignorée ({id})");
+                return Ok(Flow::Continue);
+            }
+            notify(data, state);
+            Ok(Flow::Continue)
+        }
+        "revocation" => {
+            let sub = &data["payload"]["subscription"];
+            eprintln!(
+                "[Twitch] Souscription {} révoquée par Twitch ({})",
+                sub["type"].as_str().unwrap_or("?"),
+                sub["status"].as_str().unwrap_or("?")
+            );
+            Ok(Flow::Continue)
+        }
+        // `session_keepalive` : sa seule arrivée a déjà réarmé le délai.
+        _ => Ok(Flow::Continue),
+    }
+}
+
+/// Délai de keepalive annoncé par un `session_welcome`, s'il y en a un.
+fn keepalive_of(data: &Value) -> Option<Duration> {
+    data["payload"]["session"]["keepalive_timeout_seconds"]
+        .as_u64()
+        .filter(|&secs| secs > 0)
+        .map(Duration::from_secs)
+}
+
+/// Applique une notification : compteurs, état du direct ou alerte.
+fn notify(data: &Value, state: &Mutex<TwitchState>) {
+    let kind = data["metadata"]["subscription_type"].as_str().unwrap_or("");
+    let event = &data["payload"]["event"];
+
+    match kind {
+        "channel.follow" => {
+            let name = event["user_name"].as_str().unwrap_or("Inconnu").to_string();
+            let mut g = state.lock().unwrap();
+            g.total_followers += 1;
+            g.last_follower = Some(name.clone());
+            println!("[Twitch] Nouveau follower: {name}");
+        }
+        "stream.online" => {
+            let started = event["started_at"].as_str().map(str::to_string);
+            let mut g = state.lock().unwrap();
+            g.live = true;
+            g.stream_started_at = started;
+            println!("[Twitch] Stream en ligne");
+        }
+        "stream.offline" => {
+            let mut g = state.lock().unwrap();
+            g.live = false;
+            g.stream_started_at = None;
+            println!("[Twitch] Stream hors ligne");
+        }
+        _ => {
+            if let Some(alert) = alert_from(kind, event) {
+                // Le `Sender` est cloné hors du verrou : le garde ne doit pas être
+                // tenu plus longtemps que la copie.
+                let sender = state.lock().unwrap().alerts.clone();
+                println!(
+                    "[Twitch] Alerte {:?} : {} ({})",
+                    alert.kind, alert.user_name, alert.amount
+                );
+                // `send` n'échoue que sans aucun abonné. Depuis que la tâche subathon
+                // en est un permanent, ça ne se produit plus qu'au tout début du
+                // démarrage.
+                let _ = sender.send(alert);
+            }
+        }
+    }
 }
 
 /// Palier d'abonnement en valeur numérique.
@@ -789,6 +1000,98 @@ mod tests {
         let sub = AlertEvent::sample(AlertKind::Sub, "", 0);
         assert_eq!(sub.months, 0);
         assert!(sub.user_input.is_empty());
+    }
+
+    // ── Connexion EventSub ──────────────────────────────────────────────────────
+
+    #[test]
+    fn un_identifiant_deja_vu_est_refuse() {
+        let mut recent = RecentIds::new(4);
+        assert!(recent.first_time("a"));
+        assert!(!recent.first_time("a"));
+        assert!(recent.first_time("b"));
+    }
+
+    #[test]
+    fn un_identifiant_evince_au_dela_de_la_capacite_redevient_neuf() {
+        let mut recent = RecentIds::new(2);
+        assert!(recent.first_time("a"));
+        assert!(recent.first_time("b"));
+        assert!(recent.first_time("c")); // évince « a »
+        assert!(recent.first_time("a"));
+        assert!(!recent.first_time("c"));
+    }
+
+    #[test]
+    fn le_keepalive_annonce_est_lu_et_son_absence_laisse_le_delai_courant() {
+        let welcome = json!({ "payload": { "session": { "keepalive_timeout_seconds": 30 } } });
+        assert_eq!(keepalive_of(&welcome), Some(Duration::from_secs(30)));
+
+        // Le welcome d'une connexion de remplacement peut le porter à `null`.
+        let reconnected = json!({ "payload": { "session": { "keepalive_timeout_seconds": null } } });
+        assert_eq!(keepalive_of(&reconnected), None);
+    }
+
+    #[test]
+    fn une_demande_de_reconnexion_rend_l_url_de_remplacement() {
+        let state = Mutex::new(TwitchState::default());
+        let mut recent = RecentIds::new(RECENT_IDS);
+        let message = json!({
+            "metadata": { "message_id": "r1", "message_type": "session_reconnect" },
+            "payload": { "session": {
+                "id": "AQoQexAWVYKSTIu4ec_2VAxyuhAB",
+                "status": "reconnecting",
+                "keepalive_timeout_seconds": null,
+                "reconnect_url": "wss://eventsub.wss.twitch.tv?..."
+            } }
+        });
+
+        assert_eq!(
+            handle(&message, &state, &mut recent).unwrap(),
+            Flow::Reconnect("wss://eventsub.wss.twitch.tv?...".to_string())
+        );
+    }
+
+    #[test]
+    fn une_notification_redelivree_ne_joue_qu_une_alerte() {
+        let state = Mutex::new(TwitchState::default());
+        let mut alerts = state.lock().unwrap().alerts.subscribe();
+        let mut recent = RecentIds::new(RECENT_IDS);
+        let cheer = json!({
+            "metadata": {
+                "message_id": "befa7b53-d79d-478f-86b9-120f112b044e",
+                "message_type": "notification",
+                "subscription_type": "channel.cheer"
+            },
+            "payload": { "event": { "user_name": "Cool_User", "bits": 1000, "message": "pogchamp" } }
+        });
+
+        handle(&cheer, &state, &mut recent).unwrap();
+        handle(&cheer, &state, &mut recent).unwrap();
+
+        let alert = alerts.try_recv().unwrap();
+        assert_eq!(alert.kind, AlertKind::Cheer);
+        assert_eq!(alert.amount, 1000);
+        assert!(alerts.try_recv().is_err(), "la redélivrance a joué une seconde alerte");
+    }
+
+    #[test]
+    fn un_follow_redelivre_ne_compte_qu_une_fois() {
+        let state = Mutex::new(TwitchState::default());
+        let mut recent = RecentIds::new(RECENT_IDS);
+        let follow = json!({
+            "metadata": {
+                "message_id": "f1",
+                "message_type": "notification",
+                "subscription_type": "channel.follow"
+            },
+            "payload": { "event": { "user_name": "Ronni" } }
+        });
+
+        handle(&follow, &state, &mut recent).unwrap();
+        handle(&follow, &state, &mut recent).unwrap();
+
+        assert_eq!(state.lock().unwrap().total_followers, 1);
     }
 
     #[test]

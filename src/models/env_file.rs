@@ -62,13 +62,7 @@ pub fn merge_keys(changes: &Map<String, Value>) -> Result<(), String> {
 
     let json = serde_json::to_string_pretty(&Value::Object(data))
         .map_err(|e| format!("Error serializing env.json: {e}"))?;
-
-    let tmp = format!("{ENV_PATH}.tmp");
-    std::fs::write(&tmp, json).map_err(|e| format!("Error writing env.json: {e}"))?;
-    std::fs::rename(&tmp, ENV_PATH).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        format!("Error replacing env.json: {e}")
-    })
+    super::fs_atomic::write(ENV_PATH, &json)
 }
 
 #[cfg(test)]

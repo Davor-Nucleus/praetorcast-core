@@ -1,5 +1,6 @@
 pub mod config;
 pub mod env_file;
+pub mod fs_atomic;
 pub mod settings;
 pub mod theme;
 pub mod banner;

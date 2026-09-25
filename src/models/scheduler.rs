@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
+use super::fs_atomic;
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct DaySchedule {
     #[serde(rename = "dayIndex")]
@@ -62,10 +64,7 @@ pub fn read() -> Result<SchedulerConfig, String> {
 pub fn write(config: &SchedulerConfig) -> Result<(), String> {
     let json = serde_json::to_string_pretty(config)
         .map_err(|e| format!("Error serializing: {}", e))?;
-    fs::create_dir_all("data")
-        .map_err(|e| format!("Error creating data dir: {}", e))?;
-    fs::write("data/scheduler.json", json)
-        .map_err(|e| format!("Error writing scheduler.json: {}", e))
+    fs_atomic::write("data/scheduler.json", &json)
 }
 
 #[cfg(test)]

@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
+use super::fs_atomic;
+
 /// Nature d'une carte de la rotation.
 ///
 /// Le choix est fait à l'ajout dans `/banner-config`. `Text` reste le défaut : une
@@ -155,10 +157,7 @@ pub fn write(config: &BannerConfig) -> Result<(), String> {
     };
     let json = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Error serializing: {}", e))?;
-    fs::create_dir_all("data")
-        .map_err(|e| format!("Error creating data dir: {}", e))?;
-    fs::write("data/banner.json", json)
-        .map_err(|e| format!("Error writing banner.json: {}", e))
+    fs_atomic::write("data/banner.json", &json)
 }
 
 #[cfg(test)]

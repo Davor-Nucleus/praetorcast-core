@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 
+use super::fs_atomic;
+
 const TEXT_PATH: &str = "data/text.json";
 
 /// Animation d'**entrée**, jouée une seule fois quand le texte apparaît.
@@ -315,8 +317,7 @@ pub fn write(config: &TextConfig) -> Result<(), String> {
     };
     let json =
         serde_json::to_string_pretty(&config).map_err(|e| format!("Error serializing: {}", e))?;
-    fs::create_dir_all("data").map_err(|e| format!("Error creating data dir: {}", e))?;
-    fs::write(TEXT_PATH, json).map_err(|e| format!("Error writing text.json: {}", e))
+    fs_atomic::write(TEXT_PATH, &json)
 }
 
 #[cfg(test)]

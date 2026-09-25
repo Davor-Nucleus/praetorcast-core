@@ -38,18 +38,17 @@ pub async fn text_ws(req: HttpRequest, body: web::Payload) -> actix_web::Result<
 
     // `MessageStream` n'est pas `Send` : on spawne sur le runtime local d'actix.
     actix_web::rt::spawn(async move {
-        // En cas d'erreur de lecture, on pousse une configuration vide (l'overlay
-        // affiche alors son « empty state ») plutôt que de couper le flux.
         let read_snapshot = || {
             text::read()
                 .ok()
                 .and_then(|config| serde_json::to_string(&config).ok())
-                .unwrap_or_else(|| r#"{"sections":[]}"#.to_string())
         };
 
         // Premier envoi immédiat : la boucle ci-dessous n'émet qu'au bout d'une
-        // seconde, l'overlay resterait vide jusque-là.
-        let mut last = read_snapshot();
+        // seconde, l'overlay resterait vide jusque-là. Faute de fichier lisible, on
+        // pousse une configuration vide (l'overlay affiche son « empty state »)
+        // plutôt que de couper le flux.
+        let mut last = read_snapshot().unwrap_or_else(|| r#"{"sections":[]}"#.to_string());
         if session.text(last.clone()).await.is_err() {
             return;
         }
@@ -72,7 +71,9 @@ pub async fn text_ws(req: HttpRequest, body: web::Payload) -> actix_web::Result<
                     _ => {}
                 },
                 _ = sleep(Duration::from_millis(1000)) => {
-                    let snapshot = read_snapshot();
+                    // Une lecture ratée en cours de route garde ce qui est affiché :
+                    // pousser une configuration vide ferait clignoter l'overlay.
+                    let Some(snapshot) = read_snapshot() else { continue };
 
                     if snapshot != last {
                         if session.text(snapshot.clone()).await.is_err() {
